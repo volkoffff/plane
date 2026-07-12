@@ -1,5 +1,5 @@
 import pyvista as pv
-import aircraft as aircraft
+import model.aircraft as aircraft
 import simulation as simulation
 import time
 import numpy as np
