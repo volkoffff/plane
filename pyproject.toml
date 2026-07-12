@@ -1,0 +1,12 @@
+[project]
+name = "plane"
+version = "0.1.0"
+description = "3D airplane simulation project"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pyvista",
+]
+
+[tool.uv]
+package = false
