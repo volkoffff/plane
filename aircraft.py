@@ -1,31 +1,39 @@
 from pathlib import Path
+from typing import Any
 
-import pyvista as pv
+import numpy as np
+
+
+AIRCRAFT_MODEL_FILENAME = "rafale.glb"
+
+
+def aircraft_model_path(filename: str = AIRCRAFT_MODEL_FILENAME) -> Path:
+    model_path = Path(__file__).with_name(filename)
+    if not model_path.exists():
+        raise FileNotFoundError(f"Modele introuvable : {model_path}")
+
+    return model_path
 
 
 def create_aircraft() -> Path:
-    fuselage = pv.Cylinder(
-        center=(0, 0, 0),
-        direction=(1, 0, 0),
-        radius=0.4,
-        height=6,
-    )
+    return aircraft_model_path()
 
-    wings = pv.Box(
-        bounds=(-0.5, 0.5, -4, 4, -0.1, 0.1)
-    )
 
-    tail = pv.Box(
-        bounds=(-2.8, -1.8, -1.5, 1.5, -0.05, 0.05)
-    )
+def import_aircraft_actors(plotter: Any, model_path: str | Path):
+    import pyvista as pv
 
-    vertical_tail = pv.Box(
-        bounds=(-2.8, -1.8, -0.08, 0.08, 0.35, 1.5)
-    )
+    model_path = Path(model_path)
+    model_center = np.array(pv.read(model_path).center, dtype=float)
+    existing_actor_names = set(plotter.renderer.actors)
 
-    model_path = Path(__file__).with_name("rafale.glb")
-    if not model_path.exists():
-        raise FileNotFoundError(f"Modèle introuvable : {model_path}")
+    plotter.import_gltf(str(model_path), set_camera=False)
+    actors = [
+        actor
+        for name, actor in plotter.renderer.actors.items()
+        if name not in existing_actor_names
+    ]
 
-    # return fuselage.merge(wings).merge(tail).merge(vertical_tail)
-    return model_path
+    if not actors:
+        raise RuntimeError(f"Aucun acteur charge depuis le modele 3D : {model_path}")
+
+    return actors, model_center

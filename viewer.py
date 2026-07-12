@@ -5,22 +5,6 @@ import time
 import numpy as np
 
 
-def import_aircraft_actors(plotter: pv.Plotter, model_path: str):
-    model_center = np.array(pv.read(model_path).center, dtype=float)
-    existing_actor_names = set(plotter.renderer.actors)
-    plotter.import_gltf(model_path, set_camera=False)
-    actors = [
-        actor
-        for name, actor in plotter.renderer.actors.items()
-        if name not in existing_actor_names
-    ]
-
-    if not actors:
-        raise RuntimeError(f"Aucun acteur charge depuis le modele 3D : {model_path}")
-
-    return actors, model_center
-
-
 def run_viewer() -> None:
     plotter = pv.Plotter()
 
@@ -54,7 +38,7 @@ def run_viewer() -> None:
     aircraft_mesh = aircraft.create_aircraft() # model 3d
 
     # actor = plotter.add_mesh(aircraft_mesh) # add the model to the scene
-    aircraft_actors, aircraft_center = import_aircraft_actors(plotter, str(aircraft_mesh)) # add the model to the scene
+    aircraft_actors, aircraft_center = aircraft.import_aircraft_actors(plotter, aircraft_mesh) # add the model to the scene
 
     ##########
     # speed chart
@@ -90,7 +74,11 @@ def run_viewer() -> None:
       position = state.position - aircraft_center
       for actor in aircraft_actors:
           actor.SetPosition(float(position[0]), float(position[1]), float(position[2]))
-          actor.RotateY(-state.pitch_rate)
+          actor.SetOrientation(
+              float(np.rad2deg(state.roll)),
+              float(-np.rad2deg(state.pitch)),
+              float(np.rad2deg(state.yaw)),
+          )
 
 
       points = np.array(trajectory)
