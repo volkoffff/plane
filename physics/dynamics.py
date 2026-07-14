@@ -1,68 +1,56 @@
 import numpy as np
 
-from physics.aerodynamics import angle_of_attack_2d, compute_forces
-from physics.atmosphere import air_density
-from physics.controls import elevator_deflection
 from physics.engine import update_throttle
-from physics.parameters import AircraftParameters
-from physics.state import AircraftState
+from physics.math3d import (
+    quaternion_derivative,
+    normalize_quaternion,
+)
+from physics.aerodynamics import total_forces_and_moments
 
 
-def compute_pitch_moment(
-    state: AircraftState,
-    params: AircraftParameters,
-    elevator_control: float,
-) -> float:
-    altitude = max(state.position[2], 0.0)
-    rho = air_density(altitude)
-
-    speed = np.linalg.norm(state.velocity)
-
-    if speed < 1e-6:
-        return 0.0
-
-    alpha = angle_of_attack_2d(state)
-    delta_e = elevator_deflection(elevator_control)
-    dynamic_pressure = 0.5 * rho * speed**2
-    pitch_rate_term = state.pitch_rate * params.mean_chord / (2.0 * speed)
-
-    cm = (
-        params.cm0
-        + params.cm_alpha * alpha
-        + params.cm_q * pitch_rate_term
-        + params.cm_delta_e * delta_e
-    )
-
-    return float(
-        dynamic_pressure
-        * params.wing_area
-        * params.mean_chord
-        * cm
-    )
-
-
-def update_state(
-    state: AircraftState,
-    params: AircraftParameters,
-    elevator_control: float,
-    throttle_command: float,
+def integrate_aircraft(
+    state,
+    params,
+    controls,
     dt: float,
-) -> AircraftState:
-    update_throttle(state, params, throttle_command, dt)
-
-    force = compute_forces(state, params)
-    pitch_moment = compute_pitch_moment(
+    wind_world: np.ndarray | None = None,
+):
+    update_throttle(
         state,
         params,
-        elevator_control,
+        controls.throttle_command,
+        dt,
     )
 
-    acceleration = force / params.mass
-    state.velocity = state.velocity + acceleration * dt
+    force_world, moment_body, air_data = total_forces_and_moments(
+        state,
+        params,
+        controls,
+        wind_world,
+    )
+
+    # Translation
+    acceleration_world = force_world / params.mass
+
+    state.velocity = state.velocity + acceleration_world * dt
     state.position = state.position + state.velocity * dt
 
-    pitch_acceleration = pitch_moment / params.pitch_inertia
-    state.pitch_rate = state.pitch_rate + pitch_acceleration * dt
-    state.pitch = state.pitch + state.pitch_rate * dt
+    # Rotation
+    I_omega = params.inertia_body @ state.omega_body
 
-    return state
+    omega_dot = np.linalg.solve(
+        params.inertia_body,
+        moment_body - np.cross(state.omega_body, I_omega),
+    )
+
+    state.omega_body = state.omega_body + omega_dot * dt
+
+    q_dot = quaternion_derivative(
+        state.quaternion,
+        state.omega_body,
+    )
+
+    state.quaternion = state.quaternion + q_dot * dt
+    state.quaternion = normalize_quaternion(state.quaternion)
+
+    return air_data

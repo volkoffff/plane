@@ -12,6 +12,7 @@ def update_throttle(
     dt: float,
 ) -> None:
     throttle_command = np.clip(throttle_command, 0, 1.5)
+
     error = throttle_command - state.throttle
 
     state.throttle += params.throttle_response * error * dt
@@ -27,8 +28,8 @@ def thrust_altitude_factor(altitude_m: float) -> float:
 
 
 def thrust_magnitude(
-    state: AircraftState,
-    params: AircraftParameters,
+    state,
+    params,
 ) -> float:
     throttle = state.throttle
 
@@ -36,17 +37,20 @@ def thrust_magnitude(
         thrust = throttle * params.max_dry_thrust
     else:
         afterburner_ratio = (throttle - 1.0) / 0.5
+
         thrust = (
             params.max_dry_thrust
             + afterburner_ratio
-            * (params.max_afterburner_thrust - params.max_dry_thrust)
+            * (
+                params.max_afterburner_thrust
+                - params.max_dry_thrust
+            )
         )
 
-    altitude = max(state.position[2], 0.0)
+    altitude = -state.position[2]
     thrust *= thrust_altitude_factor(altitude)
 
     return float(thrust)
-
 
 def thrust_force(
     state: AircraftState,
