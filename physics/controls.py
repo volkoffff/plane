@@ -74,11 +74,13 @@ def normalized_to_surface_deflections(
 
 
 def flight_control_law_from_mouse(
-    state,
+    state: AircraftState,
     mouse_dx: float,
     mouse_dy: float,
     rudder_input: float,
     throttle_command: float,
+    beta: float = 0.0,
+    target_yaw_rate: float = 0.0,
 ) -> ControlInputs:
     """
     mouse_dx : -1 à 1
@@ -86,6 +88,9 @@ def flight_control_law_from_mouse(
 
     mouse_dx > 0 : demande de roulis à droite
     mouse_dy < 0 : souris vers le haut, demande de cabré
+
+    beta : angle de dérapage courant, en radians
+    target_yaw_rate : taux de lacet souhaité, en rad/s
     """
 
     max_roll_rate = np.deg2rad(120.0)
@@ -98,12 +103,16 @@ def flight_control_law_from_mouse(
 
     kp_roll = 0.8
     kp_pitch = 1.0
+    k_yaw_rate = 0.20
+    k_beta = 0.05
 
     aileron = kp_roll * (target_p - p)
     elevator = kp_pitch * (target_q - q)
 
-    # Petit amortisseur de lacet
-    rudder = rudder_input - 0.2 * r
+    # Avec les signes du modele aero actuel, un gouvernail positif cree un
+    # moment de lacet negatif. On commande donc r - target_yaw_rate.
+    yaw_rate_error = r - target_yaw_rate
+    rudder = rudder_input + k_yaw_rate * yaw_rate_error + k_beta * beta
 
     return ControlInputs(
         elevator=float(np.clip(elevator, -1.0, 1.0)),

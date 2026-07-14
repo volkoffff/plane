@@ -58,6 +58,7 @@ class ViewerMode(str, Enum):
 
 MAX_ROLL_RATE = np.deg2rad(120.0)
 MAX_PITCH_RATE = np.deg2rad(60.0)
+GRAVITY = 9.81
 NED_TO_PANDA = np.array(
     [
         [0.0, 1.0, 0.0],
@@ -81,6 +82,7 @@ class FlightCommand:
     mouse_dy: float
     rudder_input: float
     throttle_command: float
+    target_yaw_rate: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -105,12 +107,23 @@ def quaternion_to_euler(q: np.ndarray) -> tuple[float, float, float]:
     return float(roll), float(pitch), float(yaw)
 
 
+def coordinated_yaw_rate(
+    state: AircraftState,
+    bank_angle_deg: float,
+) -> float:
+    speed = max(float(np.linalg.norm(state.velocity)), 1.0)
+    bank_angle = np.deg2rad(np.clip(bank_angle_deg, -70.0, 70.0))
+
+    return float(GRAVITY * np.tan(bank_angle) / speed)
+
+
 def attitude_command(
     state: AircraftState,
     target_roll_deg: float,
     target_pitch_deg: float,
     throttle_command: float,
     rudder_input: float = 0.0,
+    coordinated_turn: bool = False,
 ) -> FlightCommand:
     roll, pitch, _ = quaternion_to_euler(state.quaternion)
 
@@ -133,6 +146,11 @@ def attitude_command(
         mouse_dy=float(-target_q / MAX_PITCH_RATE),
         rudder_input=rudder_input,
         throttle_command=throttle_command,
+        target_yaw_rate=(
+            coordinated_yaw_rate(state, target_roll_deg)
+            if coordinated_turn
+            else 0.0
+        ),
     )
 
 
@@ -168,12 +186,18 @@ def build_flight_program() -> list[FlightInstruction]:
         FlightInstruction(
             "tourner",
             8.0,
-            lambda state, t: attitude_command(state, 42.0, 8.0, 1.00, 0.04),
+            lambda state, t: attitude_command(
+                state,
+                42.0,
+                8.0,
+                1.00,
+                coordinated_turn=True,
+            ),
         ),
         FlightInstruction(
             "sortie virage",
             5.0,
-            lambda state, t: attitude_command(state, 0.0, 3.0, 0.95, -0.02),
+            lambda state, t: attitude_command(state, 0.0, 3.0, 0.95),
         ),
         FlightInstruction(
             "prise vitesse",
@@ -508,6 +532,8 @@ class PandaFlightViewer(ShowBase):
             mouse_dy=command.mouse_dy,
             rudder_input=command.rudder_input,
             throttle_command=command.throttle_command,
+            beta=float(self.air_data.get("beta", 0.0)),
+            target_yaw_rate=command.target_yaw_rate,
         )
 
         self.air_data = integrate_aircraft(
