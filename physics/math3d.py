@@ -1,12 +1,13 @@
 import numpy as np
 
-def normalize_quaternion(q: np.ndarray) -> np.ndarray:
-  norm = np.linalg.norm(q)
 
-  if norm < 1e-12:
-    return np.array[1.0, 0.0, 0.0, 0.0]
-  
-  return q / norm
+def normalize_quaternion(q: np.ndarray) -> np.ndarray:
+    norm = np.linalg.norm(q)
+
+    if norm < 1e-12:
+        return np.array([1.0, 0.0, 0.0, 0.0])
+
+    return q / norm
 
 
 def quaternion_multiply(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
@@ -19,11 +20,6 @@ def quaternion_multiply(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
         w1*y2 - x1*z2 + y1*w2 + z1*x2,
         w1*z2 + x1*y2 - y1*x2 + z1*w2,
     ])
-
-
-def quaternion_to_matrix(q: np.ndarray) -> np.ndarray:
-    q = normalize_quaternion(q)
-    w, x, y, z = q
 
 
 def quaternion_to_matrix(q: np.ndarray) -> np.ndarray:
@@ -47,6 +43,19 @@ def quaternion_to_matrix(q: np.ndarray) -> np.ndarray:
             1 - 2*(x*x + y*y),
         ],
     ])
+
+
+def quaternion_to_euler(q: np.ndarray) -> tuple[float, float, float]:
+    """
+    Return roll, pitch, yaw for the body -> world quaternion.
+    """
+    rotation = quaternion_to_matrix(q)
+
+    pitch = np.arcsin(np.clip(-rotation[2, 0], -1.0, 1.0))
+    roll = np.arctan2(rotation[2, 1], rotation[2, 2])
+    yaw = np.arctan2(rotation[1, 0], rotation[0, 0])
+
+    return float(roll), float(pitch), float(yaw)
 
 
 def quaternion_derivative(

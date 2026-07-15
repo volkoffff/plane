@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
 from enum import Enum
-from typing import Callable
 
 import numpy as np
 from panda3d.core import (
@@ -44,11 +42,10 @@ from direct.showbase.ShowBaseGlobal import globalClock
 from direct.task import Task
 
 from model.aircraft import create_aircraft
-from physics.controls import flight_control_law_from_mouse
-from physics.dynamics import integrate_aircraft
-from physics.math3d import quaternion_to_matrix
-from physics.parameters import rafale_like_parameters
-from physics.state import AircraftState, initial_state
+from physics.autopilot import FlightCommand, build_flight_program
+from physics.math3d import quaternion_to_euler, quaternion_to_matrix
+from physics.simulator import AircraftSimulation
+from physics.state import AircraftState
 
 
 class ViewerMode(str, Enum):
@@ -56,9 +53,6 @@ class ViewerMode(str, Enum):
     SIMULATION = "simulation"
 
 
-MAX_ROLL_RATE = np.deg2rad(120.0)
-MAX_PITCH_RATE = np.deg2rad(60.0)
-GRAVITY = 9.81
 NED_TO_PANDA = np.array(
     [
         [0.0, 1.0, 0.0],
@@ -74,147 +68,6 @@ MODEL_PANDA_TO_BODY_PANDA = np.array(
         [0.0, -1.0, 0.0],
     ],
 )
-
-
-@dataclass(frozen=True)
-class FlightCommand:
-    mouse_dx: float
-    mouse_dy: float
-    rudder_input: float
-    throttle_command: float
-    target_yaw_rate: float = 0.0
-
-
-@dataclass(frozen=True)
-class FlightInstruction:
-    name: str
-    duration: float
-    command: Callable[[AircraftState, float], FlightCommand]
-
-
-def wrap_angle(angle_rad: float) -> float:
-    return float((angle_rad + np.pi) % (2.0 * np.pi) - np.pi)
-
-
-def quaternion_to_euler(q: np.ndarray) -> tuple[float, float, float]:
-    """Return roll, pitch, yaw for the body -> world NED quaternion."""
-    rotation = quaternion_to_matrix(q)
-
-    pitch = np.arcsin(np.clip(-rotation[2, 0], -1.0, 1.0))
-    roll = np.arctan2(rotation[2, 1], rotation[2, 2])
-    yaw = np.arctan2(rotation[1, 0], rotation[0, 0])
-
-    return float(roll), float(pitch), float(yaw)
-
-
-def coordinated_yaw_rate(
-    state: AircraftState,
-    bank_angle_deg: float,
-) -> float:
-    speed = max(float(np.linalg.norm(state.velocity)), 1.0)
-    bank_angle = np.deg2rad(np.clip(bank_angle_deg, -70.0, 70.0))
-
-    return float(GRAVITY * np.tan(bank_angle) / speed)
-
-
-def attitude_command(
-    state: AircraftState,
-    target_roll_deg: float,
-    target_pitch_deg: float,
-    throttle_command: float,
-    rudder_input: float = 0.0,
-    coordinated_turn: bool = False,
-) -> FlightCommand:
-    roll, pitch, _ = quaternion_to_euler(state.quaternion)
-
-    roll_error = wrap_angle(np.deg2rad(target_roll_deg) - roll)
-    pitch_error = np.deg2rad(target_pitch_deg) - pitch
-
-    target_p = np.clip(
-        1.8 * roll_error,
-        -np.deg2rad(45.0),
-        np.deg2rad(45.0),
-    )
-    target_q = np.clip(
-        1.6 * pitch_error,
-        -np.deg2rad(35.0),
-        np.deg2rad(35.0),
-    )
-
-    return FlightCommand(
-        mouse_dx=float(target_p / MAX_ROLL_RATE),
-        mouse_dy=float(-target_q / MAX_PITCH_RATE),
-        rudder_input=rudder_input,
-        throttle_command=throttle_command,
-        target_yaw_rate=(
-            coordinated_yaw_rate(state, target_roll_deg)
-            if coordinated_turn
-            else 0.0
-        ),
-    )
-
-
-def pitch_rate_command(
-    pitch_rate_deg_s: float,
-    throttle_command: float,
-) -> FlightCommand:
-    return FlightCommand(
-        mouse_dx=0.0,
-        mouse_dy=float(-np.deg2rad(pitch_rate_deg_s) / MAX_PITCH_RATE),
-        rudder_input=0.0,
-        throttle_command=throttle_command,
-    )
-
-
-def build_flight_program() -> list[FlightInstruction]:
-    return [
-        FlightInstruction(
-            "avancer",
-            4.0,
-            lambda state, t: attitude_command(state, 0.0, 3.0, 0.90),
-        ),
-        FlightInstruction(
-            "monter",
-            6.0,
-            lambda state, t: attitude_command(state, 0.0, 22.0, 1.15),
-        ),
-        FlightInstruction(
-            "palier",
-            3.0,
-            lambda state, t: attitude_command(state, 0.0, 4.0, 0.95),
-        ),
-        FlightInstruction(
-            "tourner",
-            8.0,
-            lambda state, t: attitude_command(
-                state,
-                42.0,
-                8.0,
-                1.00,
-                coordinated_turn=True,
-            ),
-        ),
-        FlightInstruction(
-            "sortie virage",
-            5.0,
-            lambda state, t: attitude_command(state, 0.0, 3.0, 0.95),
-        ),
-        FlightInstruction(
-            "prise vitesse",
-            4.0,
-            lambda state, t: attitude_command(state, 0.0, 0.0, 1.35),
-        ),
-        FlightInstruction(
-            "looping",
-            14.0,
-            lambda state, t: pitch_rate_command(49.0, 1.45),
-        ),
-        FlightInstruction(
-            "recuperation",
-            8.0,
-            lambda state, t: attitude_command(state, 0.0, 5.0, 1.05),
-        ),
-    ]
 
 
 def ned_to_panda(position_ned: np.ndarray) -> np.ndarray:
@@ -340,8 +193,7 @@ class PandaFlightViewer(ShowBase):
         self.accept("f1", self.set_mode, [ViewerMode.INSTRUCTIONS])
         self.accept("f2", self.set_mode, [ViewerMode.SIMULATION])
 
-        self.state = initial_state()
-        self.params = rafale_like_parameters()
+        self.simulation = AircraftSimulation()
         self.program = build_flight_program()
         self.manual_throttle_command = float(self.state.throttle)
         self.key_state = {
@@ -355,16 +207,9 @@ class PandaFlightViewer(ShowBase):
             "rudder_right": False,
         }
 
-        self.physics_dt = 0.01
         self.accumulator = 0.0
-        self.elapsed_time = 0.0
         self.instruction_time = 0.0
         self.instruction_index = 0
-        self.air_data = {
-            "speed": float(np.linalg.norm(self.state.velocity)),
-            "alpha": 0.0,
-            "beta": 0.0,
-        }
 
         self.trajectory_points: list[np.ndarray] = [ned_to_panda(self.state.position)]
         self.trajectory_node = None
@@ -381,6 +226,22 @@ class PandaFlightViewer(ShowBase):
 
     def set_mode(self, mode: ViewerMode) -> None:
         self.mode = mode
+
+    @property
+    def state(self) -> AircraftState:
+        return self.simulation.state
+
+    @property
+    def air_data(self) -> dict:
+        return self.simulation.air_data
+
+    @property
+    def elapsed_time(self) -> float:
+        return self.simulation.elapsed_time
+
+    @property
+    def physics_dt(self) -> float:
+        return self.simulation.dt
 
     def setup_controls(self) -> None:
         key_bindings = {
@@ -525,25 +386,7 @@ class PandaFlightViewer(ShowBase):
         else:
             command = self.get_manual_command()
 
-
-        controls = flight_control_law_from_mouse(
-            self.state,
-            mouse_dx=command.mouse_dx,
-            mouse_dy=command.mouse_dy,
-            rudder_input=command.rudder_input,
-            throttle_command=command.throttle_command,
-            beta=float(self.air_data.get("beta", 0.0)),
-            target_yaw_rate=command.target_yaw_rate,
-        )
-
-        self.air_data = integrate_aircraft(
-            self.state,
-            self.params,
-            controls,
-            self.physics_dt,
-        )
-
-        self.elapsed_time += self.physics_dt
+        self.simulation.step(command)
 
         if self.mode == ViewerMode.INSTRUCTIONS:
             self.advance_instruction()
