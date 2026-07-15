@@ -250,6 +250,8 @@ class PandaFlightViewer(ShowBase):
         self.accept("escape", self.userExit)
         self.accept("f1", self.set_mode, [ViewerMode.INSTRUCTIONS])
         self.accept("f2", self.set_mode, [ViewerMode.SIMULATION])
+        self.accept("mouse1", self.set_fire_trigger, [True])
+        self.accept("mouse1-up", self.set_fire_trigger, [False])
 
         self.simulation = AircraftSimulation()
         self.program = build_flight_program()
@@ -268,9 +270,11 @@ class PandaFlightViewer(ShowBase):
         self.accumulator = 0.0
         self.instruction_time = 0.0
         self.instruction_index = 0
+        self.fire_trigger_held = False
 
         self.trajectory_points: list[np.ndarray] = [ned_to_panda(self.state.position)]
         self.trajectory_node = None
+        self.bullet_node = None
         self.last_trajectory_time = 0.0
         self.control_surface_animator: ControlSurfaceAnimator | None = None
 
@@ -285,6 +289,9 @@ class PandaFlightViewer(ShowBase):
 
     def set_mode(self, mode: ViewerMode) -> None:
         self.mode = mode
+
+    def set_fire_trigger(self, is_pressed: bool) -> None:
+        self.fire_trigger_held = is_pressed
 
     @property
     def state(self) -> AircraftState:
@@ -446,7 +453,7 @@ class PandaFlightViewer(ShowBase):
         else:
             command = self.get_manual_command()
 
-        self.simulation.step(command)
+        self.simulation.step(command, trigger_fire=self.fire_trigger_held)
 
         if self.mode == ViewerMode.INSTRUCTIONS:
             self.advance_instruction()
@@ -520,6 +527,7 @@ class PandaFlightViewer(ShowBase):
         )
 
         self.update_control_surfaces()
+        self.update_bullets()
         self.update_trajectory(position)
         self.update_camera(position, rotation)
         self.update_hud()
@@ -529,6 +537,27 @@ class PandaFlightViewer(ShowBase):
             return
 
         self.control_surface_animator.update(self.simulation.last_controls)
+
+    def update_bullets(self) -> None:
+        if self.bullet_node is not None:
+            self.bullet_node.removeNode()
+            self.bullet_node = None
+
+        if not self.simulation.bullets:
+            return
+
+        lines = LineSegs("bullets")
+        lines.setThickness(3.5)
+
+        for bullet in self.simulation.bullets:
+            age_ratio = np.clip(bullet.age / bullet.lifetime, 0.0, 1.0)
+            alpha = 1.0 - age_ratio
+            lines.setColor(1.0, 0.82, 0.18, alpha)
+            lines.moveTo(*ned_to_panda(bullet.previous_position))
+            lines.drawTo(*ned_to_panda(bullet.position))
+
+        self.bullet_node = self.render.attachNewNode(lines.create())
+        self.bullet_node.setTransparency(TransparencyAttrib.MAlpha)
 
     def update_trajectory(self, position: np.ndarray) -> None:
         if self.elapsed_time - self.last_trajectory_time < 0.08:
@@ -609,8 +638,10 @@ class PandaFlightViewer(ShowBase):
                     f"yaw = {np.rad2deg(yaw):6.1f} deg",
                     f"thr = {self.state.throttle:4.2f}",
                     f"cmd gaz = {self.manual_throttle_command:4.2f}",
+                    f"bullets = {len(self.simulation.bullets)}",
                     "F1 instructions | F2 simulation",
                     "Souris ou Q/D: roulis | S/Z: pitch",
+                    "Clic gauche maintenu: tir",
                     "Maj/Ctrl: gaz | A/E: lacet",
                 ]
             )
