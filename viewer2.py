@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 from enum import Enum
 
 import numpy as np
@@ -16,6 +17,7 @@ from panda3d.core import (
     GeomVertexWriter,
     LMatrix4f,
     LPoint3f,
+    LVector3f,
     LineSegs,
     TextNode,
     TransparencyAttrib,
@@ -43,6 +45,7 @@ from direct.task import Task
 
 from model.aircraft import create_aircraft
 from physics.autopilot import FlightCommand, build_flight_program
+from physics.controls import ControlInputs
 from physics.math3d import quaternion_to_euler, quaternion_to_matrix
 from physics.simulator import AircraftSimulation
 from physics.state import AircraftState
@@ -68,6 +71,61 @@ MODEL_PANDA_TO_BODY_PANDA = np.array(
         [0.0, -1.0, 0.0],
     ],
 )
+
+
+@dataclass(frozen=True)
+class ControlSurfaceBinding:
+    node_name: str
+    control_name: str
+    axis: str
+    max_angle_deg: float
+    sign: float = 1.0
+
+
+CONTROL_SURFACE_BINDINGS = (
+    ControlSurfaceBinding("Aile_Droite", "aileron", "z", 22.0, 1.0),
+    ControlSurfaceBinding("Aile_Gauche", "aileron", "z", 22.0, -1.0),
+    ControlSurfaceBinding("Canard_Droit", "elevator", "z", 18.0, 1.0),
+    ControlSurfaceBinding("Canard_Gauche", "elevator", "z", 18.0, 1.0),
+    ControlSurfaceBinding("Derive", "rudder", "y", 22.0, 1.0),
+)
+
+CONTROL_SURFACE_AXES = {
+    "x": LVector3f(1.0, 0.0, 0.0),
+    "y": LVector3f(0.0, 1.0, 0.0),
+    "z": LVector3f(0.0, 0.0, 1.0),
+}
+
+
+class ControlSurfaceAnimator:
+    def __init__(
+        self,
+        aircraft_model,
+        bindings: tuple[ControlSurfaceBinding, ...] = CONTROL_SURFACE_BINDINGS,
+    ) -> None:
+        self.surfaces = []
+
+        for binding in bindings:
+            node = aircraft_model.find(f"**/{binding.node_name}")
+            if node.isEmpty():
+                print(f"Surface animee introuvable : {binding.node_name}")
+                continue
+
+            self.surfaces.append((binding, node, LMatrix4f(node.getMat())))
+
+    def update(self, controls: ControlInputs | None) -> None:
+        if controls is None:
+            return
+
+        for binding, node, base_mat in self.surfaces:
+            value = float(np.clip(getattr(controls, binding.control_name), -1.0, 1.0))
+            angle = binding.sign * binding.max_angle_deg * value
+            axis = CONTROL_SURFACE_AXES.get(binding.axis)
+
+            if axis is None:
+                raise ValueError(f"Axe de surface invalide : {binding.axis}")
+
+            node.setMat(LMatrix4f.rotateMat(angle, axis) * base_mat)
 
 
 def ned_to_panda(position_ned: np.ndarray) -> np.ndarray:
@@ -214,6 +272,7 @@ class PandaFlightViewer(ShowBase):
         self.trajectory_points: list[np.ndarray] = [ned_to_panda(self.state.position)]
         self.trajectory_node = None
         self.last_trajectory_time = 0.0
+        self.control_surface_animator: ControlSurfaceAnimator | None = None
 
         self.setup_rendering()
         self.setup_scene()
@@ -347,6 +406,7 @@ class PandaFlightViewer(ShowBase):
             -model_center.y,
             -model_center.z,
         )
+        self.control_surface_animator = ControlSurfaceAnimator(aircraft_model)
 
     def setup_hud(self) -> None:
         self.status_text = OnscreenText(
@@ -459,9 +519,16 @@ class PandaFlightViewer(ShowBase):
             panda_matrix_from_rotation_translation(rotation, position)
         )
 
+        self.update_control_surfaces()
         self.update_trajectory(position)
         self.update_camera(position, rotation)
         self.update_hud()
+
+    def update_control_surfaces(self) -> None:
+        if self.control_surface_animator is None:
+            return
+
+        self.control_surface_animator.update(self.simulation.last_controls)
 
     def update_trajectory(self, position: np.ndarray) -> None:
         if self.elapsed_time - self.last_trajectory_time < 0.08:
