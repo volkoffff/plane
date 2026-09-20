@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
 from enum import Enum
 
 import numpy as np
@@ -15,27 +14,19 @@ from panda3d.core import (
     GeomVertexData,
     GeomVertexFormat,
     GeomVertexWriter,
-    LMatrix4f,
-    LPoint3f,
-    LVector3f,
     LineSegs,
+    LMatrix4f,
+    LPoint2f,
+    LPoint3f,
     TextNode,
     TransparencyAttrib,
     loadPrcFileData,
 )
 
+# Configuration Panda3D appliquee avant la creation de la fenetre.
 loadPrcFileData(
     "",
-    "\n".join(
-        [
-            "window-title Plane - Panda3D",
-            "show-frame-rate-meter true",
-            "sync-video false",
-            "framebuffer-multisample true",
-            "multisamples 4",
-            "textures-power-2 none",
-        ]
-    ),
+    "window-title Plane - Panda3D\nshow-frame-rate-meter true\nsync-video false\nframebuffer-multisample true\nmultisamples 4\ntextures-power-2 none",
 )
 
 from direct.gui.OnscreenText import OnscreenText
@@ -44,18 +35,23 @@ from direct.showbase.ShowBaseGlobal import globalClock
 from direct.task import Task
 
 from model.aircraft import create_aircraft
+from model.aircraft_animations import AircraftAnimationController
 from physics.autopilot import FlightCommand, build_flight_program
-from physics.controls import ControlInputs
 from physics.math3d import quaternion_to_euler, quaternion_to_matrix
 from physics.simulator import AircraftSimulation
 from physics.state import AircraftState
+from viewer_controls import MouseInput, PlayerAircraftInputController
 
 
+# Modes de pilotage disponibles dans le viewer.
 class ViewerMode(str, Enum):
     INSTRUCTIONS = "instructions"
     SIMULATION = "simulation"
 
 
+# Conventions de repere :
+# - la physique travaille en NED : x nord/avant, y est/droite, z vers le bas ;
+# - Panda3D travaille avec z vers le haut et y comme axe de profondeur.
 NED_TO_PANDA = np.array(
     [
         [0.0, 1.0, 0.0],
@@ -73,61 +69,7 @@ MODEL_PANDA_TO_BODY_PANDA = np.array(
 )
 
 
-@dataclass(frozen=True)
-class ControlSurfaceBinding:
-    node_name: str
-    control_name: str
-    axis: str
-    max_angle_deg: float
-    sign: float = 1.0
-
-
-CONTROL_SURFACE_BINDINGS = (
-    ControlSurfaceBinding("Aile_Droite", "aileron", "z", 22.0, 1.0),
-    ControlSurfaceBinding("Aile_Gauche", "aileron", "z", 22.0, -1.0),
-    ControlSurfaceBinding("Canard_Droit", "elevator", "z", 18.0, 1.0),
-    ControlSurfaceBinding("Canard_Gauche", "elevator", "z", 18.0, 1.0),
-    ControlSurfaceBinding("Derive", "rudder", "y", 22.0, 1.0),
-)
-
-CONTROL_SURFACE_AXES = {
-    "x": LVector3f(1.0, 0.0, 0.0),
-    "y": LVector3f(0.0, 1.0, 0.0),
-    "z": LVector3f(0.0, 0.0, 1.0),
-}
-
-
-class ControlSurfaceAnimator:
-    def __init__(
-        self,
-        aircraft_model,
-        bindings: tuple[ControlSurfaceBinding, ...] = CONTROL_SURFACE_BINDINGS,
-    ) -> None:
-        self.surfaces = []
-
-        for binding in bindings:
-            node = aircraft_model.find(f"**/{binding.node_name}")
-            if node.isEmpty():
-                print(f"Surface animee introuvable : {binding.node_name}")
-                continue
-
-            self.surfaces.append((binding, node, LMatrix4f(node.getMat())))
-
-    def update(self, controls: ControlInputs | None) -> None:
-        if controls is None:
-            return
-
-        for binding, node, base_mat in self.surfaces:
-            value = float(np.clip(getattr(controls, binding.control_name), -1.0, 1.0))
-            angle = binding.sign * binding.max_angle_deg * value
-            axis = CONTROL_SURFACE_AXES.get(binding.axis)
-
-            if axis is None:
-                raise ValueError(f"Axe de surface invalide : {binding.axis}")
-
-            node.setMat(LMatrix4f.rotateMat(angle, axis) * base_mat)
-
-
+# Helpers de transformation entre l'etat physique et les matrices Panda3D.
 def ned_to_panda(position_ned: np.ndarray) -> np.ndarray:
     return NED_TO_PANDA @ position_ned
 
@@ -158,6 +100,7 @@ def panda_matrix_from_rotation_translation(
     return matrix
 
 
+# Geometries simples de la scene de debug : sol, grille et axes.
 def make_ground(
     x_min: float = -6_000.0,
     x_max: float = 6_000.0,
@@ -247,41 +190,34 @@ class PandaFlightViewer(ShowBase):
 
         self.mode = mode
         self.disableMouse()
+
+        # Evenements globaux Panda3D.
         self.accept("escape", self.userExit)
         self.accept("f1", self.set_mode, [ViewerMode.INSTRUCTIONS])
         self.accept("f2", self.set_mode, [ViewerMode.SIMULATION])
-        self.accept("mouse1", self.set_fire_trigger, [True])
-        self.accept("mouse1-up", self.set_fire_trigger, [False])
 
+        # Etat de simulation et programme de demonstration automatique.
         self.simulation = AircraftSimulation()
         self.program = build_flight_program()
-        self.manual_throttle_command = float(self.state.throttle)
-        self.key_state = {
-            "throttle_up": False,
-            "throttle_down": False,
-            "roll_left": False,
-            "roll_right": False,
-            "pitch_up": False,
-            "pitch_down": False,
-            "rudder_left": False,
-            "rudder_right": False,
-        }
+        self.player_controls = PlayerAircraftInputController(
+            throttle_command=float(self.state.throttle),
+        )
 
         self.accumulator = 0.0
         self.instruction_time = 0.0
         self.instruction_index = 0
-        self.fire_trigger_held = False
 
+        # Noeuds/collections temporaires reconstruits ou mis a jour par le rendu.
         self.trajectory_points: list[np.ndarray] = [ned_to_panda(self.state.position)]
         self.trajectory_node = None
         self.bullet_node = None
         self.last_trajectory_time = 0.0
-        self.control_surface_animator: ControlSurfaceAnimator | None = None
+        self.aircraft_animations: AircraftAnimationController | None = None
 
         self.setup_rendering()
         self.setup_scene()
         self.setup_aircraft()
-        self.setup_controls()
+        self.setup_player_controls()
         self.setup_hud()
         self.update_visuals()
 
@@ -289,9 +225,6 @@ class PandaFlightViewer(ShowBase):
 
     def set_mode(self, mode: ViewerMode) -> None:
         self.mode = mode
-
-    def set_fire_trigger(self, is_pressed: bool) -> None:
-        self.fire_trigger_held = is_pressed
 
     @property
     def state(self) -> AircraftState:
@@ -309,41 +242,12 @@ class PandaFlightViewer(ShowBase):
     def physics_dt(self) -> float:
         return self.simulation.dt
 
-    def setup_controls(self) -> None:
-        key_bindings = {
-            "control": ("throttle_down", True),
-            "control-up": ("throttle_down", False),
-            "lcontrol": ("throttle_down", True),
-            "lcontrol-up": ("throttle_down", False),
-            "rcontrol": ("throttle_down", True),
-            "rcontrol-up": ("throttle_down", False),
-            "shift": ("throttle_up", True),
-            "shift-up": ("throttle_up", False),
-            "lshift": ("throttle_up", True),
-            "lshift-up": ("throttle_up", False),
-            "rshift": ("throttle_up", True),
-            "rshift-up": ("throttle_up", False),
-            "q": ("roll_left", True),
-            "q-up": ("roll_left", False),
-            "d": ("roll_right", True),
-            "d-up": ("roll_right", False),
-            "z": ("pitch_down", True),
-            "z-up": ("pitch_down", False),
-            "s": ("pitch_up", True),
-            "s-up": ("pitch_up", False),
-            "a": ("rudder_left", True),
-            "a-up": ("rudder_left", False),
-            "e": ("rudder_right", True),
-            "e-up": ("rudder_right", False),
-        }
-
-        for event_name, (key_name, is_pressed) in key_bindings.items():
-            self.accept(event_name, self.set_key_state, [key_name, is_pressed])
-
-    def set_key_state(self, key_name: str, is_pressed: bool) -> None:
-        self.key_state[key_name] = is_pressed
+    def setup_player_controls(self) -> None:
+        # Les details du mapping clavier/souris restent hors du viewer.
+        self.player_controls.bind_events(self.accept)
 
     def setup_rendering(self) -> None:
+        # Reglages generaux de camera et rendu.
         self.setBackgroundColor(0.72, 0.84, 0.96, 1.0)
 
         if self.camLens is not None:
@@ -359,6 +263,7 @@ class PandaFlightViewer(ShowBase):
                 pass
 
     def setup_scene(self) -> None:
+        # Scene minimale : un sol transparent, une grille et deux lumieres.
         ground = self.render.attachNewNode(make_ground())
         ground.setTransparency(TransparencyAttrib.MAlpha)
         ground.setTwoSided(True)
@@ -377,6 +282,8 @@ class PandaFlightViewer(ShowBase):
         self.render.setLight(sun_np)
 
     def setup_aircraft(self) -> None:
+        # Chargement du GLB, recentrage du modele, puis creation du controleur
+        # d'animations visuelles dedie aux surfaces mobiles et au reacteur.
         try:
             import gltf  # noqa: F401
         except ImportError as exc:
@@ -413,9 +320,24 @@ class PandaFlightViewer(ShowBase):
             -model_center.y,
             -model_center.z,
         )
-        self.control_surface_animator = ControlSurfaceAnimator(aircraft_model)
+        self.aircraft_animations = AircraftAnimationController(
+            aircraft_model,
+            self.aircraft_root,
+            aircraft_visual.getTightBounds(self.aircraft_root),
+        )
 
     def setup_hud(self) -> None:
+        # HUD 2D : viseur projete devant l'avion + telemetry textuelle.
+        self.crosshair_text = OnscreenText(
+            text="+",
+            parent=self.aspect2d,
+            pos=(0.0, 0.0),
+            align=TextNode.ACenter,
+            scale=0.075,
+            fg=(1.0, 0.88, 0.18, 0.9),
+            mayChange=True,
+        )
+
         self.status_text = OnscreenText(
             text="",
             parent=self.a2dTopLeft,
@@ -427,6 +349,7 @@ class PandaFlightViewer(ShowBase):
         )
 
     def update_task(self, task: Task.Task) -> int:
+        # Pas physique fixe avec accumulateur : le rendu peut varier, la physique non.
         frame_dt = min(globalClock.getDt(), 0.05)
         self.accumulator += frame_dt
 
@@ -446,6 +369,7 @@ class PandaFlightViewer(ShowBase):
         return Task.cont
 
     def step_physics(self) -> bool:
+        # Deux sources de commande : programme automatique ou pilotage manuel.
         if self.mode == ViewerMode.INSTRUCTIONS:
             command = self.get_instruction_command()
             if command is None:
@@ -453,7 +377,10 @@ class PandaFlightViewer(ShowBase):
         else:
             command = self.get_manual_command()
 
-        self.simulation.step(command, trigger_fire=self.fire_trigger_held)
+        self.simulation.step(
+            command,
+            trigger_fire=self.player_controls.trigger_fire,
+        )
 
         if self.mode == ViewerMode.INSTRUCTIONS:
             self.advance_instruction()
@@ -461,6 +388,7 @@ class PandaFlightViewer(ShowBase):
         return True
 
     def get_instruction_command(self) -> FlightCommand | None:
+        # Recupere la commande associee a l'instruction courante.
         if self.instruction_index >= len(self.program):
             return None
 
@@ -468,6 +396,7 @@ class PandaFlightViewer(ShowBase):
         return instruction.command(self.state, self.instruction_time)
 
     def advance_instruction(self) -> None:
+        # Avance dans le scenario d'instructions lorsque la duree est atteinte.
         instruction = self.program[self.instruction_index]
         self.instruction_time += self.physics_dt
 
@@ -476,49 +405,24 @@ class PandaFlightViewer(ShowBase):
             self.instruction_time = 0.0
 
     def get_manual_command(self) -> FlightCommand:
-        throttle_delta = 0.0
-        if self.key_state["throttle_up"]:
-            throttle_delta += 0.55 * self.physics_dt
-        if self.key_state["throttle_down"]:
-            throttle_delta -= 0.55 * self.physics_dt
-
-        self.manual_throttle_command = float(
-            np.clip(self.manual_throttle_command + throttle_delta, 0.0, 1.5)
+        # Le viewer lit Panda3D ; le controleur convertit en FlightCommand.
+        return self.player_controls.build_flight_command(
+            self.physics_dt,
+            self.read_mouse_input(),
         )
 
-        rudder_input = 0.0
-        if self.key_state["rudder_left"]:
-            rudder_input += 0.55
-        if self.key_state["rudder_right"]:
-            rudder_input -= 0.55
-
-        mouse_dx = 0.0
-        mouse_dy = 0.0
-        if self.mouseWatcherNode.hasMouse():
+    def read_mouse_input(self) -> MouseInput:
+        if self.mouseWatcherNode is not None and self.mouseWatcherNode.hasMouse():
             mouse = self.mouseWatcherNode.getMouse()
-            mouse_dx = float(np.clip(mouse.getX(), -1.0, 1.0))
-            mouse_dy = float(np.clip(-mouse.getY(), -1.0, 1.0))
+            return MouseInput(
+                x=float(np.clip(mouse.getX(), -1.0, 1.0)),
+                y=float(np.clip(-mouse.getY(), -1.0, 1.0)),
+            )
 
-        keyboard_roll = 0.0
-        if self.key_state["roll_left"]:
-            keyboard_roll -= 1.0
-        if self.key_state["roll_right"]:
-            keyboard_roll += 1.0
-
-        keyboard_pitch = 0.0
-        if self.key_state["pitch_up"]:
-            keyboard_pitch -= 1.0
-        if self.key_state["pitch_down"]:
-            keyboard_pitch += 1.0
-
-        return FlightCommand(
-            mouse_dx=float(np.clip(mouse_dx + keyboard_roll, -1.0, 1.0)),
-            mouse_dy=float(np.clip(mouse_dy + keyboard_pitch, -1.0, 1.0)),
-            rudder_input=rudder_input,
-            throttle_command=self.manual_throttle_command,
-        )
+        return MouseInput()
 
     def update_visuals(self) -> None:
+        # Point central du rendu : position avion, effets, projectiles, camera, HUD.
         position = ned_to_panda(self.state.position)
         rotation = aircraft_panda_rotation(self.state)
 
@@ -526,19 +430,56 @@ class PandaFlightViewer(ShowBase):
             panda_matrix_from_rotation_translation(rotation, position)
         )
 
-        self.update_control_surfaces()
+        self.update_aircraft_animations()
         self.update_bullets()
         self.update_trajectory(position)
         self.update_camera(position, rotation)
+        self.update_crosshair(position, rotation)
         self.update_hud()
 
-    def update_control_surfaces(self) -> None:
-        if self.control_surface_animator is None:
+    def update_crosshair(
+        self,
+        aircraft_position: np.ndarray,
+        aircraft_rotation: np.ndarray,
+    ) -> None:
+        # Le viseur est le point situe loin devant l'axe longitudinal de l'avion.
+        if self.camera is None or self.camera.isEmpty() or self.camLens is None:
+            self.crosshair_text.hide()
             return
 
-        self.control_surface_animator.update(self.simulation.last_controls)
+        forward = aircraft_rotation @ np.array([0.0, 1.0, 0.0])
+        aim_point = aircraft_position + 2_000.0 * forward
+        camera_point = self.camera.getRelativePoint(
+            self.render,
+            LPoint3f(*aim_point),
+        )
+
+        projected = LPoint2f()
+        if not self.camLens.project(camera_point, projected):
+            self.crosshair_text.hide()
+            return
+
+        self.crosshair_text.show()
+        self.crosshair_text.setPos(
+            float(projected.x * self.getAspectRatio()),
+            float(projected.y),
+        )
+
+    def update_aircraft_animations(self) -> None:
+        # Le viewer transmet les valeurs utiles, le module model gere les details.
+        if self.aircraft_animations is None:
+            return
+
+        speed = float(self.air_data.get("speed", 0.0))
+        self.aircraft_animations.update(
+            self.simulation.last_controls,
+            self.state.throttle,
+            speed,
+            self.elapsed_time,
+        )
 
     def update_bullets(self) -> None:
+        # Trace les balles sous forme de segments courts entre deux pas physiques.
         if self.bullet_node is not None:
             self.bullet_node.removeNode()
             self.bullet_node = None
@@ -560,6 +501,7 @@ class PandaFlightViewer(ShowBase):
         self.bullet_node.setTransparency(TransparencyAttrib.MAlpha)
 
     def update_trajectory(self, position: np.ndarray) -> None:
+        # Laisse une trainee de trajectoire peu dense pour garder le rendu leger.
         if self.elapsed_time - self.last_trajectory_time < 0.08:
             return
 
@@ -588,6 +530,7 @@ class PandaFlightViewer(ShowBase):
         aircraft_position: np.ndarray,
         aircraft_rotation: np.ndarray,
     ) -> None:
+        # Camera suiveuse : legerement derriere et au-dessus de l'avion.
         if self.camera is None or self.camera.isEmpty():
             return
 
@@ -614,6 +557,7 @@ class PandaFlightViewer(ShowBase):
         self.camera.lookAt(LPoint3f(*focal_point))
 
     def update_hud(self) -> None:
+        # Texte de debug volontairement simple : utile pour regler la physique.
         if self.mode == ViewerMode.SIMULATION:
             instruction_name = "simulation manuelle"
         elif self.instruction_index < len(self.program):
@@ -637,7 +581,8 @@ class PandaFlightViewer(ShowBase):
                     f"pitch = {np.rad2deg(pitch):6.1f} deg",
                     f"yaw = {np.rad2deg(yaw):6.1f} deg",
                     f"thr = {self.state.throttle:4.2f}",
-                    f"cmd gaz = {self.manual_throttle_command:4.2f}",
+                    f"moteur = {AircraftAnimationController.engine_stage_label(self.state.throttle)}",
+                    f"cmd gaz = {self.player_controls.throttle_command:4.2f}",
                     f"bullets = {len(self.simulation.bullets)}",
                     "F1 instructions | F2 simulation",
                     "Souris ou Q/D: roulis | S/Z: pitch",
