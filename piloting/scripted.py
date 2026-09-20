@@ -3,8 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from physics.autopilot import FlightCommand, attitude_command, pitch_rate_command
 from physics.state import AircraftState
+from piloting.autopilot import attitude_command, pitch_rate_command
+from piloting.commands import FlightCommand
 
 
 @dataclass(frozen=True)

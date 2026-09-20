@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from enum import Enum
 
-import numpy as np
 from panda3d.core import loadPrcFileData
 
 # Configuration Panda3D appliquee avant la creation de la fenetre.
@@ -15,14 +14,16 @@ from direct.showbase.ShowBase import ShowBase
 from direct.showbase.ShowBaseGlobal import globalClock
 from direct.task import Task
 
-from physics.autopilot import FlightCommand
+from piloting.commands import FlightCommand
+from piloting.player import MouseInput, PlayerAircraftInputController
+from piloting.scripted import FlightProgramRunner
 from physics.simulator import AircraftSimulation
 from physics.state import AircraftState
 from viewer.aircraft_visual import AircraftVisual
 from viewer.camera import ChaseCamera
-from viewer.flight_program import FlightProgramRunner
 from viewer.hud import FlightHud
-from viewer.input import MouseInput, PlayerAircraftInputController
+from viewer.panda_input import bind_player_controls
+from viewer.panda_input import read_mouse_input as read_panda_mouse_input
 from viewer.projectiles import ProjectileRenderer
 from viewer.scene import SceneRenderer
 from viewer.trajectory import TrajectoryRenderer
@@ -58,7 +59,7 @@ class PandaFlightViewer(ShowBase):
         self.player_controls = PlayerAircraftInputController(
             throttle_command=float(self.state.throttle),
         )
-        self.player_controls.bind_events(self.accept)
+        bind_player_controls(self.accept, self.player_controls)
 
         self.accumulator = 0.0
 
@@ -162,14 +163,7 @@ class PandaFlightViewer(ShowBase):
         )
 
     def read_mouse_input(self) -> MouseInput:
-        if self.mouseWatcherNode is not None and self.mouseWatcherNode.hasMouse():
-            mouse = self.mouseWatcherNode.getMouse()
-            return MouseInput(
-                x=float(np.clip(mouse.getX(), -1.0, 1.0)),
-                y=float(np.clip(-mouse.getY(), -1.0, 1.0)),
-            )
-
-        return MouseInput()
+        return read_panda_mouse_input(self.mouseWatcherNode)
 
     def update_visuals(self) -> None:
         position, rotation = self.aircraft_visual.update_pose(self.state)

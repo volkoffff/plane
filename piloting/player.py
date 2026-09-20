@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable, Protocol
 
 import numpy as np
 
-from physics.autopilot import FlightCommand
+from piloting.commands import FlightCommand
 
 
 @dataclass(frozen=True)
@@ -14,47 +13,16 @@ class MouseInput:
     y: float = 0.0
 
 
-class EventBinder(Protocol):
-    def __call__(
-        self,
-        event_name: str,
-        method: Callable[..., None],
-        extra_args: list[object],
-    ) -> object:
-        ...
-
-
-KEY_BINDINGS = (
-    ("control", "throttle_down", True),
-    ("control-up", "throttle_down", False),
-    ("lcontrol", "throttle_down", True),
-    ("lcontrol-up", "throttle_down", False),
-    ("rcontrol", "throttle_down", True),
-    ("rcontrol-up", "throttle_down", False),
-    ("shift", "throttle_up", True),
-    ("shift-up", "throttle_up", False),
-    ("lshift", "throttle_up", True),
-    ("lshift-up", "throttle_up", False),
-    ("rshift", "throttle_up", True),
-    ("rshift-up", "throttle_up", False),
-    ("q", "roll_left", True),
-    ("q-up", "roll_left", False),
-    ("d", "roll_right", True),
-    ("d-up", "roll_right", False),
-    ("z", "pitch_down", True),
-    ("z-up", "pitch_down", False),
-    ("s", "pitch_up", True),
-    ("s-up", "pitch_up", False),
-    ("a", "rudder_left", True),
-    ("a-up", "rudder_left", False),
-    ("e", "rudder_right", True),
-    ("e-up", "rudder_right", False),
+CONTROL_NAMES = (
+    "pitch_down",
+    "pitch_up",
+    "roll_left",
+    "roll_right",
+    "rudder_left",
+    "rudder_right",
+    "throttle_down",
+    "throttle_up",
 )
-FIRE_BINDINGS = (
-    ("mouse1", True),
-    ("mouse1-up", False),
-)
-CONTROL_NAMES = tuple(sorted({key_name for _, key_name, _ in KEY_BINDINGS}))
 
 
 def make_default_key_state() -> dict[str, bool]:
@@ -68,13 +36,6 @@ class PlayerAircraftInputController:
     rudder_step: float = 0.55
     key_state: dict[str, bool] = field(default_factory=make_default_key_state)
     trigger_fire: bool = False
-
-    def bind_events(self, accept: EventBinder) -> None:
-        for event_name, key_name, is_pressed in KEY_BINDINGS:
-            accept(event_name, self.set_key_state, [key_name, is_pressed])
-
-        for event_name, is_pressed in FIRE_BINDINGS:
-            accept(event_name, self.set_fire_trigger, [is_pressed])
 
     def set_key_state(self, key_name: str, is_pressed: bool) -> None:
         self.key_state[key_name] = is_pressed

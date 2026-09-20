@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from physics.autopilot import FlightCommand
+from piloting.commands import FlightCommand
 from physics.controls import ControlInputs, flight_control_law_from_mouse
 from physics.dynamics import integrate_aircraft
 from physics.parameters import AircraftParameters, rafale_like_parameters

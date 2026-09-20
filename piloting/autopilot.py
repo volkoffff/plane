@@ -1,25 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 import numpy as np
 
 from physics.math3d import quaternion_to_euler
 from physics.state import AircraftState
+from piloting.commands import FlightCommand
 
 
 MAX_ROLL_RATE = np.deg2rad(120.0)
 MAX_PITCH_RATE = np.deg2rad(60.0)
 GRAVITY = 9.81
-
-
-@dataclass(frozen=True)
-class FlightCommand:
-    mouse_dx: float
-    mouse_dy: float
-    rudder_input: float
-    throttle_command: float
-    target_yaw_rate: float = 0.0
 
 
 def wrap_angle(angle_rad: float) -> float:
