@@ -20,9 +20,11 @@ class AircraftVisual:
         self,
         loader,
         render: NodePath,
+        animations_enabled: bool = False,
     ) -> None:
         self.loader = loader
         self.render = render
+        self.animations_enabled = animations_enabled
         self.root: NodePath | None = None
         self.animations: AircraftAnimationController | None = None
 
@@ -86,6 +88,9 @@ class AircraftVisual:
         speed: float,
         elapsed_time: float,
     ) -> None:
+        if not self.animations_enabled:
+            return
+
         if self.animations is None:
             return
 

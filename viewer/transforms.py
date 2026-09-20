@@ -6,7 +6,6 @@ from panda3d.core import LMatrix4f
 from physics.math3d import quaternion_to_matrix
 from physics.state import AircraftState
 
-
 # Conventions de repere :
 # - la physique travaille en NED : x nord/avant, y est/droite, z vers le bas ;
 # - Panda3D travaille avec z vers le haut et y comme axe de profondeur.

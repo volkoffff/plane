@@ -39,6 +39,7 @@ class PandaFlightViewer(ShowBase):
         self,
         window_type: str | None = None,
         mode: ViewerMode = ViewerMode.INSTRUCTIONS,
+        animations_enabled: bool = False,
     ) -> None:
         if window_type is None:
             super().__init__()
@@ -46,6 +47,7 @@ class PandaFlightViewer(ShowBase):
             super().__init__(windowType=window_type)
 
         self.mode = mode
+        self.animations_enabled = animations_enabled
         self.disableMouse()
         self.accept("escape", self.userExit)
         self.accept("f1", self.set_mode, [ViewerMode.INSTRUCTIONS])
@@ -64,7 +66,11 @@ class PandaFlightViewer(ShowBase):
         self.scene = SceneRenderer(self.render)
         self.scene.setup()
 
-        self.aircraft_visual = AircraftVisual(self.loader, self.render)
+        self.aircraft_visual = AircraftVisual(
+            self.loader,
+            self.render,
+            animations_enabled=self.animations_enabled,
+        )
         self.aircraft_visual.setup()
 
         self.projectile_renderer = ProjectileRenderer(self.render)
@@ -201,6 +207,12 @@ class PandaFlightViewer(ShowBase):
         return self.flight_program.current_name
 
 
-def run_viewer(mode: ViewerMode = ViewerMode.INSTRUCTIONS) -> None:
-    app = PandaFlightViewer(mode=mode)
+def run_viewer(
+    mode: ViewerMode = ViewerMode.INSTRUCTIONS,
+    animations_enabled: bool = False,
+) -> None:
+    app = PandaFlightViewer(
+        mode=mode,
+        animations_enabled=animations_enabled,
+    )
     app.run()

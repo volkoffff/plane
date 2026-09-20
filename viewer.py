@@ -15,9 +15,17 @@ def parse_args() -> argparse.Namespace:
         default=ViewerMode.INSTRUCTIONS.value,
         help="Mode de pilotage au lancement.",
     )
+    parser.add_argument(
+        "--animations",
+        action="store_true",
+        help="Reactive les animations de l'avion pour comparer les performances.",
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    run_viewer(ViewerMode(args.mode))
+    run_viewer(
+        ViewerMode(args.mode),
+        animations_enabled=args.animations,
+    )
