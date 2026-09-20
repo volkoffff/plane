@@ -14,11 +14,11 @@ from direct.showbase.ShowBase import ShowBase
 from direct.showbase.ShowBaseGlobal import globalClock
 from direct.task import Task
 
+from physics.simulator import AircraftSimulation
+from physics.state import AircraftState
 from piloting.commands import FlightCommand
 from piloting.player import MouseInput, PlayerAircraftInputController
 from piloting.scripted import FlightProgramRunner
-from physics.simulator import AircraftSimulation
-from physics.state import AircraftState
 from viewer.aircraft_visual import AircraftVisual
 from viewer.camera import ChaseCamera
 from viewer.hud import FlightHud
