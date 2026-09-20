@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
 
 import numpy as np
 
@@ -21,13 +20,6 @@ class FlightCommand:
     rudder_input: float
     throttle_command: float
     target_yaw_rate: float = 0.0
-
-
-@dataclass(frozen=True)
-class FlightInstruction:
-    name: str
-    duration: float
-    command: Callable[[AircraftState, float], FlightCommand]
 
 
 def wrap_angle(angle_rad: float) -> float:
@@ -91,54 +83,3 @@ def pitch_rate_command(
         rudder_input=0.0,
         throttle_command=throttle_command,
     )
-
-
-def build_flight_program() -> list[FlightInstruction]:
-    return [
-        FlightInstruction(
-            "avancer",
-            4.0,
-            lambda state, t: attitude_command(state, 0.0, 3.0, 0.90),
-        ),
-        FlightInstruction(
-            "monter",
-            6.0,
-            lambda state, t: attitude_command(state, 0.0, 22.0, 1.15),
-        ),
-        FlightInstruction(
-            "palier",
-            3.0,
-            lambda state, t: attitude_command(state, 0.0, 4.0, 0.95),
-        ),
-        FlightInstruction(
-            "tourner",
-            8.0,
-            lambda state, t: attitude_command(
-                state,
-                42.0,
-                8.0,
-                1.00,
-                coordinated_turn=True,
-            ),
-        ),
-        FlightInstruction(
-            "sortie virage",
-            5.0,
-            lambda state, t: attitude_command(state, 0.0, 3.0, 0.95),
-        ),
-        FlightInstruction(
-            "prise vitesse",
-            4.0,
-            lambda state, t: attitude_command(state, 0.0, 0.0, 1.35),
-        ),
-        FlightInstruction(
-            "looping",
-            14.0,
-            lambda state, t: pitch_rate_command(49.0, 1.45),
-        ),
-        FlightInstruction(
-            "recuperation",
-            8.0,
-            lambda state, t: attitude_command(state, 0.0, 5.0, 1.05),
-        ),
-    ]
