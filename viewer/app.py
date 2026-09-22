@@ -14,7 +14,7 @@ from direct.showbase.ShowBase import ShowBase
 from direct.showbase.ShowBaseGlobal import globalClock
 from direct.task import Task
 
-from physics.simulator import AircraftSimulation
+from physics.physics import AircraftPhysics
 from physics.state import AircraftState
 from piloting.commands import FlightCommand
 from piloting.player import MouseInput, PlayerAircraftInputController
@@ -54,7 +54,7 @@ class PandaFlightViewer(ShowBase):
         self.accept("f1", self.set_mode, [ViewerMode.INSTRUCTIONS])
         self.accept("f2", self.set_mode, [ViewerMode.SIMULATION])
 
-        self.simulation = AircraftSimulation()
+        self.simulation = AircraftPhysics()
         self.flight_program = FlightProgramRunner()
         self.player_controls = PlayerAircraftInputController(
             throttle_command=float(self.state.throttle),

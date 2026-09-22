@@ -1,9 +1,9 @@
 """Physics package for the aircraft simulation."""
 
+from physics.physics import AircraftPhysics
 from physics.projectiles import Bullet
-from physics.simulator import AircraftSimulation
 
 __all__ = [
-    "AircraftSimulation",
+    "AircraftPhysics",
     "Bullet",
 ]

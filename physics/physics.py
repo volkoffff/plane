@@ -4,16 +4,16 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from piloting.commands import FlightCommand
 from physics.controls import ControlInputs, flight_control_law_from_mouse
 from physics.dynamics import integrate_aircraft
 from physics.parameters import AircraftParameters, rafale_like_parameters
 from physics.projectiles import Bullet, create_bullet_from_aircraft, integrate_bullets
 from physics.state import AircraftState, initial_state
+from piloting.commands import FlightCommand
 
 
 @dataclass
-class AircraftSimulation:
+class AircraftPhysics:
     state: AircraftState = field(default_factory=initial_state)
     params: AircraftParameters = field(default_factory=rafale_like_parameters)
     dt: float = 0.01
