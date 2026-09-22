@@ -7,7 +7,6 @@ import numpy as np
 from physics.math3d import quaternion_to_matrix
 from physics.state import AircraftState
 
-
 GRAVITY_NED = np.array([0.0, 0.0, 9.81])
 
 
@@ -18,6 +17,9 @@ class Bullet:
     previous_position: np.ndarray
     age: float = 0.0
     lifetime: float = 6.0
+    owner_id: int | None = None
+    team: object | None = None
+    damage: float = 10.0
 
     @property
     def is_alive(self) -> bool:
@@ -29,6 +31,9 @@ def create_bullet_from_aircraft(
     muzzle_speed: float = 850.0,
     muzzle_offset_body: np.ndarray | None = None,
     lifetime: float = 4.0,
+    owner_id: int | None = None,
+    team: object | None = None,
+    damage: float = 10.0,
 ) -> Bullet:
     if muzzle_offset_body is None:
         muzzle_offset_body = np.array([11.0, 0.0, 0.0])
@@ -43,6 +48,9 @@ def create_bullet_from_aircraft(
         velocity=muzzle_velocity.copy(),
         previous_position=muzzle_position.copy(),
         lifetime=lifetime,
+        owner_id=owner_id,
+        team=team,
+        damage=damage,
     )
 
 

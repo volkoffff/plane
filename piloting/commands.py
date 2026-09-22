@@ -10,3 +10,8 @@ class FlightCommand:
     rudder_input: float
     throttle_command: float
     target_yaw_rate: float = 0.0
+
+@dataclass(frozen=True)
+class AircraftAction:
+    flight: FlightCommand
+    fire_primary: bool = False
