@@ -1,11 +1,11 @@
 import numpy as np
 
+from physics.aerodynamics import total_forces_and_moments
 from physics.engine import update_throttle
 from physics.math3d import (
-    quaternion_derivative,
     normalize_quaternion,
+    quaternion_derivative,
 )
-from physics.aerodynamics import total_forces_and_moments
 
 
 def integrate_aircraft(

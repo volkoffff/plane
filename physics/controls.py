@@ -1,8 +1,8 @@
+from dataclasses import dataclass
+
 import numpy as np
 
 from physics.state import AircraftState, SpeedControllerState
-
-from dataclasses import dataclass
 
 
 def elevator_deflection(control: float) -> float:

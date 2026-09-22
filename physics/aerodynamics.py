@@ -1,10 +1,9 @@
 import numpy as np
 
 from physics.atmosphere import air_density
-from physics.engine import thrust_force
-from physics.math3d import quaternion_to_matrix
-from physics.engine import thrust_magnitude
 from physics.controls import normalized_to_surface_deflections
+from physics.engine import thrust_force, thrust_magnitude
+from physics.math3d import quaternion_to_matrix
 from physics.parameters import AircraftParameters
 from physics.state import AircraftState
 
