@@ -14,11 +14,14 @@ from direct.showbase.ShowBase import ShowBase
 from direct.showbase.ShowBaseGlobal import globalClock
 from direct.task import Task
 
-from physics.physics import AircraftPhysics
+from physics.aircraft_physics import AircraftPhysics
 from physics.state import AircraftState
-from piloting.commands import FlightCommand
+from piloting.commands import AircraftAction, FlightCommand
 from piloting.player import MouseInput, PlayerAircraftInputController
 from piloting.scripted import FlightProgramRunner
+from simulation.aircraft import AircraftEntity
+from simulation.teams import Team
+from simulation.world import SimulationWorld
 from viewer.aircraft_visual import AircraftVisual
 from viewer.camera import ChaseCamera
 from viewer.hud import FlightHud
@@ -54,7 +57,13 @@ class PandaFlightViewer(ShowBase):
         self.accept("f1", self.set_mode, [ViewerMode.INSTRUCTIONS])
         self.accept("f2", self.set_mode, [ViewerMode.SIMULATION])
 
-        self.simulation = AircraftPhysics()
+        self.world = SimulationWorld()
+        self.player_aircraft = AircraftEntity(
+            team=Team.ALPHA,
+            physics=AircraftPhysics(),
+        )
+        self.world.add_aircraft(self.player_aircraft)
+        self.simulation = self.player_aircraft.physics
         self.flight_program = FlightProgramRunner()
         self.player_controls = PlayerAircraftInputController(
             throttle_command=float(self.state.throttle),
@@ -143,9 +152,14 @@ class PandaFlightViewer(ShowBase):
         if command is None:
             return False
 
-        self.simulation.step(
-            command,
-            trigger_fire=self.player_controls.trigger_fire,
+        self.world.step(
+            {
+                self.player_aircraft.id: AircraftAction(
+                    flight=command,
+                    fire_gun=self.player_controls.trigger_fire,
+                )
+            },
+            self.physics_dt,
         )
 
         if self.mode == ViewerMode.INSTRUCTIONS:
@@ -174,7 +188,7 @@ class PandaFlightViewer(ShowBase):
             self.elapsed_time,
         )
 
-        self.projectile_renderer.update(self.simulation.bullets)
+        self.projectile_renderer.update(self.world.bullets)
         self.trajectory_renderer.update(position, self.elapsed_time)
         self.camera_controller.update(position, rotation)
         self.hud.update(
@@ -184,7 +198,7 @@ class PandaFlightViewer(ShowBase):
             state=self.state,
             air_data=self.air_data,
             throttle_command=self.player_controls.throttle_command,
-            bullet_count=len(self.simulation.bullets),
+            bullet_count=len(self.world.bullets),
             camera=self.camera,
             cam_lens=self.camLens,
             render=self.render,

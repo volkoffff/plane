@@ -1,6 +1,6 @@
 """Physics package for the aircraft simulation."""
 
-from physics.physics import AircraftPhysics
+from physics.aircraft_physics import AircraftPhysics
 from physics.projectiles import Bullet
 
 __all__ = [

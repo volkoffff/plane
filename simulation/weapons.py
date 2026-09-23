@@ -1,8 +1,7 @@
 from dataclasses import dataclass
 
+from physics.projectiles import Bullet, create_bullet_from_aircraft, integrate_bullets
 from piloting.commands import AircraftAction
-from physics.projectiles import Bullet
-from physics.projectiles import create_bullet_from_aircraft, integrate_bullets
 
 
 @dataclass
@@ -50,7 +49,7 @@ class WeaponSystem:
             if action is None:
                 continue
 
-            if action.fire_primary and entity.weapon.try_fire():
+            if action.fire_gun and entity.weapon.try_fire():
                 bullet = create_bullet_from_aircraft(
                     entity.physics.state,
                     owner_id=entity.id,

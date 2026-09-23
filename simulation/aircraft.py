@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from itertools import count
 from typing import ClassVar
 
-from physics.physics import AircraftPhysics
+from physics.aircraft_physics import AircraftPhysics
 from simulation.teams import Team
 from simulation.weapons import Gun
 

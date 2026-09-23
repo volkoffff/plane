@@ -11,7 +11,8 @@ class FlightCommand:
     throttle_command: float
     target_yaw_rate: float = 0.0
 
+
 @dataclass(frozen=True)
 class AircraftAction:
     flight: FlightCommand
-    fire_primary: bool = False
+    fire_gun: bool = False
