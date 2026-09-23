@@ -60,8 +60,6 @@ class FlightHud:
 
     def update_status(
         self,
-        mode_name: str,
-        instruction_name: str,
         elapsed_time: float,
         state: AircraftState,
         air_data: dict,
@@ -75,8 +73,6 @@ class FlightHud:
         self.status_text.setText(
             "\n".join(
                 [
-                    f"Mode : {mode_name}",
-                    f"Instruction : {instruction_name}",
                     f"t = {elapsed_time:5.1f} s",
                     f"h = {altitude:7.0f} m",
                     f"V = {speed:6.1f} m/s",
@@ -87,7 +83,6 @@ class FlightHud:
                     f"moteur = {AircraftAnimationController.engine_stage_label(state.throttle)}",
                     f"cmd gaz = {throttle_command:4.2f}",
                     f"bullets = {bullet_count}",
-                    "F1 instructions | F2 simulation",
                     "Souris ou Q/D: roulis | S/Z: pitch",
                     "Clic gauche maintenu: tir",
                     "Maj/Ctrl: gaz | A/E: lacet",
@@ -97,8 +92,6 @@ class FlightHud:
 
     def update(
         self,
-        mode_name: str,
-        instruction_name: str,
         elapsed_time: float,
         state: AircraftState,
         air_data: dict,
@@ -120,8 +113,6 @@ class FlightHud:
             aircraft_rotation,
         )
         self.update_status(
-            mode_name,
-            instruction_name,
             elapsed_time,
             state,
             air_data,

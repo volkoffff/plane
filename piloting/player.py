@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from piloting.commands import FlightCommand
+from piloting.commands import AircraftAction, FlightCommand
 
 
 @dataclass(frozen=True)
@@ -42,6 +42,16 @@ class PlayerAircraftInputController:
 
     def set_fire_trigger(self, is_pressed: bool) -> None:
         self.trigger_fire = is_pressed
+
+    def build_action(
+        self,
+        dt: float,
+        mouse: MouseInput | None = None,
+    ) -> AircraftAction:
+        return AircraftAction(
+            flight=self.build_flight_command(dt, mouse),
+            fire_gun=self.trigger_fire,
+        )
 
     def build_flight_command(
         self,

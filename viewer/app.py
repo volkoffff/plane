@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from enum import Enum
-
 from panda3d.core import loadPrcFileData
 
 # Configuration Panda3D appliquee avant la creation de la fenetre.
@@ -14,14 +12,10 @@ from direct.showbase.ShowBase import ShowBase
 from direct.showbase.ShowBaseGlobal import globalClock
 from direct.task import Task
 
-from physics.aircraft_physics import AircraftPhysics
 from physics.state import AircraftState
-from piloting.commands import AircraftAction, FlightCommand
+from piloting.commands import AircraftAction
 from piloting.player import MouseInput, PlayerAircraftInputController
-from piloting.scripted import FlightProgramRunner
-from simulation.aircraft import AircraftEntity
-from simulation.teams import Team
-from simulation.world import SimulationWorld
+from simulation.scenarios import create_player_world
 from viewer.aircraft_visual import AircraftVisual
 from viewer.camera import ChaseCamera
 from viewer.hud import FlightHud
@@ -33,16 +27,10 @@ from viewer.trajectory import TrajectoryRenderer
 from viewer.transforms import ned_to_panda
 
 
-class ViewerMode(str, Enum):
-    INSTRUCTIONS = "instructions"
-    SIMULATION = "simulation"
-
-
 class PandaFlightViewer(ShowBase):
     def __init__(
         self,
         window_type: str | None = None,
-        mode: ViewerMode = ViewerMode.INSTRUCTIONS,
         animations_enabled: bool = False,
     ) -> None:
         if window_type is None:
@@ -50,21 +38,11 @@ class PandaFlightViewer(ShowBase):
         else:
             super().__init__(windowType=window_type)
 
-        self.mode = mode
         self.animations_enabled = animations_enabled
         self.disableMouse()
         self.accept("escape", self.userExit)
-        self.accept("f1", self.set_mode, [ViewerMode.INSTRUCTIONS])
-        self.accept("f2", self.set_mode, [ViewerMode.SIMULATION])
 
-        self.world = SimulationWorld()
-        self.player_aircraft = AircraftEntity(
-            team=Team.ALPHA,
-            physics=AircraftPhysics(),
-        )
-        self.world.add_aircraft(self.player_aircraft)
-        self.simulation = self.player_aircraft.physics
-        self.flight_program = FlightProgramRunner()
+        self.world, self.player_aircraft = create_player_world()
         self.player_controls = PlayerAircraftInputController(
             throttle_command=float(self.state.throttle),
         )
@@ -96,22 +74,19 @@ class PandaFlightViewer(ShowBase):
 
     @property
     def state(self) -> AircraftState:
-        return self.simulation.state
+        return self.player_aircraft.physics.state
 
     @property
     def air_data(self) -> dict:
-        return self.simulation.air_data
+        return self.player_aircraft.physics.air_data
 
     @property
     def elapsed_time(self) -> float:
-        return self.simulation.elapsed_time
+        return self.player_aircraft.physics.elapsed_time
 
     @property
     def physics_dt(self) -> float:
-        return self.simulation.dt
-
-    def set_mode(self, mode: ViewerMode) -> None:
-        self.mode = mode
+        return self.player_aircraft.physics.dt
 
     def setup_rendering(self) -> None:
         self.setBackgroundColor(0.72, 0.84, 0.96, 1.0)
@@ -134,9 +109,7 @@ class PandaFlightViewer(ShowBase):
 
         substeps = 0
         while self.accumulator >= self.physics_dt and substeps < 8:
-            if not self.step_physics():
-                self.accumulator = 0.0
-                break
+            self.step_world()
 
             self.accumulator -= self.physics_dt
             substeps += 1
@@ -147,34 +120,16 @@ class PandaFlightViewer(ShowBase):
         self.update_visuals()
         return Task.cont
 
-    def step_physics(self) -> bool:
-        command = self.get_flight_command()
-        if command is None:
-            return False
-
-        self.world.step(
-            {
-                self.player_aircraft.id: AircraftAction(
-                    flight=command,
-                    fire_gun=self.player_controls.trigger_fire,
-                )
-            },
-            self.physics_dt,
-        )
-
-        if self.mode == ViewerMode.INSTRUCTIONS:
-            self.flight_program.advance(self.physics_dt)
-
-        return True
-
-    def get_flight_command(self) -> FlightCommand | None:
-        if self.mode == ViewerMode.INSTRUCTIONS:
-            return self.flight_program.command(self.state, self.physics_dt)
-
-        return self.player_controls.build_flight_command(
+    def get_aircraft_action(self) -> AircraftAction:
+        return self.player_controls.build_action(
             self.physics_dt,
             self.read_mouse_input(),
         )
+
+    def step_world(self) -> None:
+        action = self.get_aircraft_action()
+
+        self.world.step({self.player_aircraft.id: action}, self.physics_dt)
 
     def read_mouse_input(self) -> MouseInput:
         return read_panda_mouse_input(self.mouseWatcherNode)
@@ -182,7 +137,7 @@ class PandaFlightViewer(ShowBase):
     def update_visuals(self) -> None:
         position, rotation = self.aircraft_visual.update_pose(self.state)
         self.aircraft_visual.update_animations(
-            self.simulation.last_controls,
+            self.player_aircraft.physics.last_controls,
             self.state.throttle,
             float(self.air_data.get("speed", 0.0)),
             self.elapsed_time,
@@ -192,8 +147,6 @@ class PandaFlightViewer(ShowBase):
         self.trajectory_renderer.update(position, self.elapsed_time)
         self.camera_controller.update(position, rotation)
         self.hud.update(
-            mode_name=self.mode.value,
-            instruction_name=self.instruction_name,
             elapsed_time=self.elapsed_time,
             state=self.state,
             air_data=self.air_data,
@@ -207,20 +160,11 @@ class PandaFlightViewer(ShowBase):
             aircraft_rotation=rotation,
         )
 
-    @property
-    def instruction_name(self) -> str:
-        if self.mode == ViewerMode.SIMULATION:
-            return "simulation manuelle"
-
-        return self.flight_program.current_name
-
 
 def run_viewer(
-    mode: ViewerMode = ViewerMode.INSTRUCTIONS,
     animations_enabled: bool = False,
 ) -> None:
     app = PandaFlightViewer(
-        mode=mode,
         animations_enabled=animations_enabled,
     )
     app.run()
