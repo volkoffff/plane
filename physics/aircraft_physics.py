@@ -31,7 +31,10 @@ class AircraftPhysics:
     def step(
         self,
         command: FlightCommand,
+        dt: float | None = None,
     ) -> dict:
+        step_dt = self.dt if dt is None else dt
+
         controls = flight_control_law_from_mouse(
             self.state,
             mouse_dx=command.mouse_dx,
@@ -47,9 +50,9 @@ class AircraftPhysics:
             self.state,
             self.params,
             controls,
-            self.dt,
+            step_dt,
         )
-        self.elapsed_time += self.dt
+        self.elapsed_time += step_dt
 
         return self.air_data
 

@@ -26,7 +26,10 @@ class SimulationWorld:
             if action is None:
                 continue
 
-            entity.physics.step(action.flight)
+            entity.physics.step(action.flight, dt)
 
         self.weapons.update(self, actions, dt)
         self.combat.update(self, dt)
+
+    def get_all_aircrafts(self) -> tuple[AircraftEntity, ...]:
+        return tuple(self.aircraft.values())
