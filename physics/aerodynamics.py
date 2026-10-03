@@ -8,14 +8,6 @@ from physics.parameters import AircraftParameters
 from physics.state import AircraftState
 
 
-def angle_of_attack_2d(state: AircraftState) -> float:
-    vx = state.velocity[0]
-    vz = state.velocity[2]
-
-    flight_path_angle = np.arctan2(vz, vx)
-    return float(state.pitch - flight_path_angle)
-
-
 def lift_coefficient_from_alpha(alpha_rad: float) -> float:
     cl0 = 0.05
     cl_alpha = 4.5
