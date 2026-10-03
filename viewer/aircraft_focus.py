@@ -12,14 +12,26 @@ class AircraftFocusController:
 
     @property
     def aircraft_ids(self) -> list[int]:
-        return [aircraft.id for aircraft in self.world.get_all_aircrafts()]
+        return [
+            aircraft.id for aircraft in self.world.get_all_aircrafts() if aircraft.alive
+        ]
 
     @property
     def current_aircraft(self) -> AircraftEntity | None:
         if self.current_aircraft_id is None:
             return None
 
-        return self.world.aircraft.get(self.current_aircraft_id)
+        aircraft = self.world.aircraft.get(self.current_aircraft_id)
+        return aircraft if aircraft is not None and aircraft.alive else None
+
+    def refresh(self) -> bool:
+        """Select a living aircraft if the current one disappeared or died."""
+        aircraft_ids = self.aircraft_ids
+        if self.current_aircraft_id in aircraft_ids:
+            return False
+        previous_id = self.current_aircraft_id
+        self.current_aircraft_id = aircraft_ids[0] if aircraft_ids else None
+        return self.current_aircraft_id != previous_id
 
     def previous(self) -> None:
         self._move(-1)

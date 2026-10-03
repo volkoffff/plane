@@ -73,7 +73,6 @@ class PandaSceneViewer(ShowBase):
         self.accept("p", self.session.toggle_pause)
         self.accept("m", self.toggle_mouse)
         self.accept("f3", self.toggle_animations)
-        self.accept("window-event", self.on_window_event)
 
         self.update_view(animation_time=0.0)
         self.taskMgr.add(self.update_task, "update-app2-view")
@@ -113,6 +112,7 @@ class PandaSceneViewer(ShowBase):
         )
 
     def update_view(self, animation_time: float = 0.0) -> None:
+        self.session.synchronize_aircraft()
         aircraft_list = self.world.get_all_aircrafts()
         poses = self.aircraft_visuals.update(
             aircraft_list,
@@ -122,6 +122,7 @@ class PandaSceneViewer(ShowBase):
 
         focused_aircraft = self.aircraft_focus.current_aircraft
         if focused_aircraft is None:
+            self.hud.show_no_aircraft()
             return
 
         pose = poses.get(focused_aircraft.id)
@@ -136,11 +137,16 @@ class PandaSceneViewer(ShowBase):
             elapsed_time=self.session.elapsed_time,
             state=physics.state,
             air_data=physics.air_data,
-            throttle_command=controller.throttle_command if controller else physics.state.throttle,
+            throttle_command=controller.throttle_command
+            if controller
+            else physics.state.throttle,
             bullet_count=len(self.world.bullets),
-            camera=self.camera, cam_lens=self.camLens, render=self.render,
+            camera=self.camera,
+            cam_lens=self.camLens,
+            render=self.render,
             aspect_ratio=float(self.getAspectRatio()),
-            aircraft_position=position, aircraft_rotation=rotation,
+            aircraft_position=position,
+            aircraft_rotation=rotation,
         )
         self.hud.status_text.appendText(
             f"\nAvion {focused_aircraft.id} | {focused_aircraft.team.name}"

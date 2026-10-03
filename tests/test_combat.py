@@ -99,7 +99,7 @@ class CombatTests(unittest.TestCase):
         live = add_target(world, position=(10, 0, 0))
         world.bullets = [make_bullet((-20, 0, 0), (20, 0, 0))]
         world.combat.update(world, 0.01)
-        self.assertEqual(dead.health, 100.0)
+        self.assertEqual(dead.health, 0.0)
         self.assertEqual(live.health, 90.0)
 
     def test_miss_remains_in_world(self) -> None:

@@ -106,13 +106,9 @@ class CombatSystem:
         attacker_id: int | None = None,
         reason: str = "unknown",
     ) -> None:
-        if not isfinite(damage) or damage < 0.0:
-            raise ValueError("Damage must be finite and nonnegative")
-        if target.is_dead() or damage == 0.0:
+        applied_damage = target.take_damage(damage)
+        if applied_damage == 0.0:
             return
-
-        applied_damage = min(damage, target.health)
-        target.health = max(0.0, target.health - applied_damage)
 
         self.events.append(
             DamageEvent(
@@ -122,6 +118,3 @@ class CombatSystem:
                 reason=reason,
             )
         )
-
-        if target.health <= 0.0:
-            target.death()

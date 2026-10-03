@@ -66,8 +66,8 @@ def create_1_vs_1_world(
         world,
         Team.BRAVO,
         create_aircraft_state(
-            position=(320.0, 90.0, -1_000.0),
-            yaw_deg=180.0,
+            position=(40.0, -90.0, -1_000.0),
+            yaw_deg=0.0,
         ),
     )
 

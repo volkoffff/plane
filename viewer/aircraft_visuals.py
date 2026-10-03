@@ -23,22 +23,35 @@ class AircraftVisualRegistry:
         self.visuals: dict[int, AircraftVisual] = {}
 
     def setup(self, aircraft_list: Iterable[AircraftEntity]) -> None:
-        for aircraft in aircraft_list:
+        """Keep exactly one visual per living aircraft, removing stale nodes."""
+        living_aircraft = {
+            aircraft.id: aircraft for aircraft in aircraft_list if aircraft.alive
+        }
+        for aircraft_id in self.visuals.keys() - living_aircraft.keys():
+            self.visuals.pop(aircraft_id).destroy()
+
+        for aircraft_id in living_aircraft:
+            if aircraft_id in self.visuals:
+                continue
             visual = AircraftVisual(
                 self.loader,
                 self.render,
                 animations_enabled=self.animations_enabled,
             )
             visual.setup()
-            self.visuals[aircraft.id] = visual
+            self.visuals[aircraft_id] = visual
 
     def update(
         self,
         aircraft_list: Iterable[AircraftEntity],
         animation_time: float | None = None,
     ) -> dict[int, AircraftPose]:
+        aircraft_list = tuple(aircraft_list)
+        self.setup(aircraft_list)
         poses = {}
         for aircraft in aircraft_list:
+            if not aircraft.alive:
+                continue
             visual = self.visuals[aircraft.id]
             poses[aircraft.id] = visual.update_pose(aircraft.physics.state)
             self._update_animations(visual, aircraft, animation_time)

@@ -1,4 +1,5 @@
 """Simulation orchestration independent of Panda3D and rendering."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -20,7 +21,9 @@ class FlightSession:
     accumulator: float = field(default=0.0, init=False)
     elapsed_time: float = field(default=0.0, init=False)
     focus: AircraftFocusController = field(init=False)
-    controllers: dict[int, PlayerAircraftInputController] = field(default_factory=dict, init=False)
+    controllers: dict[int, PlayerAircraftInputController] = field(
+        default_factory=dict, init=False
+    )
 
     def __post_init__(self) -> None:
         if not isfinite(self.fixed_dt) or self.fixed_dt <= 0 or self.max_substeps < 1:
@@ -41,6 +44,17 @@ class FlightSession:
     def release_inputs(self) -> None:
         for controller in self.controllers.values():
             controller.release_inputs()
+
+    def synchronize_aircraft(self) -> None:
+        """Discard inactive controllers and release inputs on automatic selection."""
+        selection_changed = self.focus.refresh()
+        living_ids = {
+            aircraft.id for aircraft in self.world.get_all_aircrafts() if aircraft.alive
+        }
+        for aircraft_id in self.controllers.keys() - living_ids:
+            self.controllers.pop(aircraft_id).release_inputs()
+        if selection_changed:
+            self.release_inputs()
 
     def select(self, offset: int) -> None:
         self.release_inputs()
@@ -67,6 +81,7 @@ class FlightSession:
     def advance(self, frame_dt: float, mouse: MouseInput = MouseInput()) -> int:
         if not isfinite(frame_dt) or frame_dt < 0:
             raise ValueError("Frame duration must be finite and nonnegative")
+        self.synchronize_aircraft()
         if self.paused:
             return 0
         # Bound catch-up work after a slow frame; retain the fractional step.
@@ -74,6 +89,7 @@ class FlightSession:
         steps = 0
         while self.accumulator + 1e-12 >= self.fixed_dt and steps < self.max_substeps:
             self.world.step(self.build_actions(mouse), self.fixed_dt)
+            self.synchronize_aircraft()
             self.elapsed_time += self.fixed_dt
             self.accumulator = max(0.0, self.accumulator - self.fixed_dt)
             steps += 1
@@ -91,8 +107,14 @@ class FlightSession:
                 )
             else:
                 throttle = self.controllers.get(aircraft.id)
-                actions[aircraft.id] = AircraftAction(FlightCommand(
-                    0.0, 0.0, 0.0,
-                    throttle.throttle_command if throttle else float(aircraft.physics.state.throttle),
-                ))
+                actions[aircraft.id] = AircraftAction(
+                    FlightCommand(
+                        0.0,
+                        0.0,
+                        0.0,
+                        throttle.throttle_command
+                        if throttle
+                        else float(aircraft.physics.state.throttle),
+                    )
+                )
         return actions

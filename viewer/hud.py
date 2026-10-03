@@ -30,6 +30,10 @@ class FlightHud:
             mayChange=True,
         )
 
+    def show_no_aircraft(self) -> None:
+        self.crosshair_text.hide()
+        self.status_text.setText("Aucun avion vivant\nEchap : quitter")
+
     def update_crosshair(
         self,
         camera,

@@ -15,6 +15,9 @@ from viewer.transforms import (
 )
 
 
+AIRCRAFT_MODEL_SCALE = 1
+
+
 class AircraftVisual:
     def __init__(
         self,
@@ -53,6 +56,7 @@ class AircraftVisual:
 
         aircraft_model.reparentTo(aircraft_visual)
         aircraft_model.setPos(0.0, 0.0, 0.0)
+        aircraft_model.setScale(AIRCRAFT_MODEL_SCALE)
 
         bounds = aircraft_model.getTightBounds(aircraft_visual)
         if bounds is None:
@@ -72,6 +76,13 @@ class AircraftVisual:
         )
         self.set_animations_enabled(self.animations_enabled)
 
+    def destroy(self) -> None:
+        """Remove the model and its effects; safe to call more than once."""
+        if self.root is not None:
+            self.root.removeNode()
+        self.root = None
+        self.animations = None
+
     def set_animations_enabled(self, enabled: bool) -> None:
         self.animations_enabled = enabled
         if not enabled and self.animations is not None:
@@ -80,7 +91,9 @@ class AircraftVisual:
 
     def update_pose(self, state: AircraftState) -> tuple[np.ndarray, np.ndarray]:
         if self.root is None:
-            raise RuntimeError("AircraftVisual.setup() doit etre appele avant update_pose().")
+            raise RuntimeError(
+                "AircraftVisual.setup() doit etre appele avant update_pose()."
+            )
 
         position = ned_to_panda(state.position)
         rotation = aircraft_panda_rotation(state)

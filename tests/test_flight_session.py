@@ -25,10 +25,15 @@ class FlightSessionTests(unittest.TestCase):
             for _ in range(frames):
                 session.advance(dt)
         for a, b in zip(slow.world.get_all_aircrafts(), fast.world.get_all_aircrafts()):
-            np.testing.assert_allclose(a.physics.state.position, b.physics.state.position)
-            np.testing.assert_allclose(a.physics.state.quaternion, b.physics.state.quaternion)
-        self.assertAlmostEqual(slow.player_controls.throttle_command,
-                               fast.player_controls.throttle_command)
+            np.testing.assert_allclose(
+                a.physics.state.position, b.physics.state.position
+            )
+            np.testing.assert_allclose(
+                a.physics.state.quaternion, b.physics.state.quaternion
+            )
+        self.assertAlmostEqual(
+            slow.player_controls.throttle_command, fast.player_controls.throttle_command
+        )
 
     def test_switch_releases_inputs_and_preserves_each_throttle(self) -> None:
         session = make_session()
@@ -85,6 +90,43 @@ class FlightSessionTests(unittest.TestCase):
         session.set_fire_trigger(True)
         session.advance(0.01)
         self.assertFalse(session.world.bullets)
+
+    def test_death_releases_old_inputs_without_transferring_fire_to_survivor(
+        self,
+    ) -> None:
+        session = make_session()
+        first, second = session.world.get_all_aircrafts()
+        session.set_key_state("roll_right", True)
+        session.set_fire_trigger(True)
+        old_controls = session.player_controls
+        session.world.combat.apply_damage(first, 100.0)
+        session.advance(0.01)
+        self.assertIs(session.focus.current_aircraft, second)
+        self.assertNotIn(first.id, session.controllers)
+        self.assertFalse(old_controls.trigger_fire)
+        self.assertFalse(any(old_controls.key_state.values()))
+        self.assertFalse(session.player_controls.trigger_fire)
+        self.assertEqual(second.physics.last_controls.aileron, 0.0)
+        self.assertFalse(session.world.bullets)
+
+    def test_selection_skips_dead_aircraft_in_both_directions(self) -> None:
+        session = make_session()
+        first, second = session.world.get_all_aircrafts()
+        first.death()
+        session.synchronize_aircraft()
+        for offset in (-1, 1):
+            session.select(offset)
+            self.assertIs(session.focus.current_aircraft, second)
+
+    def test_paused_session_also_removes_controller_of_dead_aircraft(self) -> None:
+        session = make_session()
+        first = session.focus.current_aircraft
+        session.set_fire_trigger(True)
+        session.toggle_pause()
+        first.death()
+        session.advance(0.0)
+        self.assertNotIn(first.id, session.controllers)
+        self.assertTrue(session.focus.current_aircraft.alive)
 
 
 if __name__ == "__main__":
