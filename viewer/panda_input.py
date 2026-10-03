@@ -4,7 +4,7 @@ from typing import Callable, Protocol
 
 import numpy as np
 
-from piloting.player import MouseInput, PlayerAircraftInputController
+from piloting.player import MouseInput
 
 
 class EventBinder(Protocol):
@@ -15,6 +15,11 @@ class EventBinder(Protocol):
         extra_args: list[object],
     ) -> object:
         ...
+
+
+class PlayerInputTarget(Protocol):
+    def set_key_state(self, key_name: str, is_pressed: bool) -> None: ...
+    def set_fire_trigger(self, is_pressed: bool) -> None: ...
 
 
 KEY_BINDINGS = (
@@ -51,7 +56,7 @@ FIRE_BINDINGS = (
 
 def bind_player_controls(
     accept: EventBinder,
-    controller: PlayerAircraftInputController,
+    controller: PlayerInputTarget,
 ) -> None:
     for event_name, key_name, is_pressed in KEY_BINDINGS:
         accept(event_name, controller.set_key_state, [key_name, is_pressed])

@@ -43,6 +43,11 @@ class PlayerAircraftInputController:
     def set_fire_trigger(self, is_pressed: bool) -> None:
         self.trigger_fire = is_pressed
 
+    def release_inputs(self) -> None:
+        for key_name in self.key_state:
+            self.key_state[key_name] = False
+        self.trigger_fire = False
+
     def build_action(
         self,
         dt: float,
