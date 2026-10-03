@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from math import isfinite
 
 from physics.projectiles import Bullet
 from piloting.commands import AircraftAction
@@ -18,6 +19,16 @@ class SimulationWorld:
         self.aircraft[entity.id] = entity
 
     def step(self, actions: dict[int, AircraftAction], dt: float) -> None:
+        if not isfinite(dt) or dt <= 0.0:
+            raise ValueError("World step must be positive and finite")
+        previous_positions = {
+            entity.id: entity.physics.state.position.copy()
+            for entity in self.aircraft.values()
+            if not entity.is_dead()
+        }
+        # Spawn at the start-of-step pose, then advance bullets and aircraft over
+        # the same interval before resolving their relative trajectories.
+        self.weapons.update(self, actions, dt)
         for aircraft_id, entity in self.aircraft.items():
             if entity.is_dead():
                 continue
@@ -28,8 +39,7 @@ class SimulationWorld:
 
             entity.physics.step(action.flight, dt)
 
-        self.weapons.update(self, actions, dt)
-        self.combat.update(self, dt)
+        self.combat.update(self, dt, previous_positions=previous_positions)
 
     def get_all_aircrafts(self) -> tuple[AircraftEntity, ...]:
         return tuple(self.aircraft.values())

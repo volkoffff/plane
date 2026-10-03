@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from math import isfinite
 
 import numpy as np
 
@@ -20,6 +21,7 @@ class Bullet:
     owner_id: int | None = None
     team: object | None = None
     damage: float = 10.0
+    last_step_duration: float = field(default=0.0, init=False)
 
     @property
     def is_alive(self) -> bool:
@@ -58,15 +60,23 @@ def integrate_bullets(
     bullets: list[Bullet],
     dt: float,
 ) -> list[Bullet]:
-    alive_bullets = []
+    """Advance active bullets, retaining final segments for collision resolution.
+
+    Combat removes expired bullets after checking their last valid trajectory.
+    """
+    if not isfinite(dt) or dt <= 0.0:
+        raise ValueError("Projectile step must be positive and finite")
+    integrated_bullets = []
 
     for bullet in bullets:
+        if not bullet.is_alive:
+            continue
+        bullet.last_step_duration = min(dt, bullet.lifetime - bullet.age)
         bullet.previous_position = bullet.position.copy()
-        bullet.velocity = bullet.velocity + GRAVITY_NED * dt
-        bullet.position = bullet.position + bullet.velocity * dt
+        bullet.velocity = bullet.velocity + GRAVITY_NED * bullet.last_step_duration
+        bullet.position = bullet.position + bullet.velocity * bullet.last_step_duration
         bullet.age += dt
 
-        if bullet.is_alive:
-            alive_bullets.append(bullet)
+        integrated_bullets.append(bullet)
 
-    return alive_bullets
+    return integrated_bullets

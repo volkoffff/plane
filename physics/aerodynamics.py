@@ -2,9 +2,8 @@ import numpy as np
 
 from physics.atmosphere import air_density
 from physics.controls import normalized_to_surface_deflections
-from physics.engine import thrust_force, thrust_magnitude
+from physics.engine import thrust_magnitude
 from physics.math3d import quaternion_to_matrix
-from physics.parameters import AircraftParameters
 from physics.state import AircraftState
 
 
@@ -44,49 +43,6 @@ def lift_direction_2d(state: AircraftState) -> np.ndarray:
         0.0,
         vx / speed_xz,
     ])
-
-
-def compute_forces(
-    state: AircraftState,
-    params: AircraftParameters,
-) -> np.ndarray:
-    g = 9.81
-
-    altitude = max(state.position[2], 0.0)
-    rho = air_density(altitude)
-
-    velocity = state.velocity
-    speed = np.linalg.norm(velocity)
-
-    gravity_force = np.array([
-        0.0,
-        0.0,
-        -params.mass * g,
-    ])
-
-    if speed < 1e-6:
-        return gravity_force
-
-    alpha = angle_of_attack_2d(state)
-    cl = lift_coefficient_from_alpha(alpha)
-    dynamic_pressure = 0.5 * rho * speed**2
-
-    lift_magnitude = dynamic_pressure * params.wing_area * cl
-    max_lift = params.max_load_factor * params.mass * g
-    lift_magnitude = np.clip(
-        lift_magnitude,
-        -3.2 * params.mass * g,
-        max_lift,
-    )
-
-    lift_force = lift_direction_2d(state) * lift_magnitude
-
-    cd = params.drag_coefficient_zero + params.induced_drag_factor * cl**2
-    drag_magnitude = dynamic_pressure * params.wing_area * cd
-    drag_direction = -velocity / speed
-    drag_force = drag_direction * drag_magnitude
-
-    return gravity_force + lift_force + drag_force + thrust_force(state, params)
 
 
 def compute_air_data(

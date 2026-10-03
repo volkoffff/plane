@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from physics.state import AircraftState, SpeedControllerState
+from physics.state import AircraftState
 
 
 def elevator_deflection(control: float) -> float:
@@ -29,26 +29,6 @@ def altitude_controller(
         np.deg2rad(12.0),
     ))
 
-
-def speed_controller_pd(
-    aircraft_state: AircraftState,
-    controller_state: SpeedControllerState,
-    target_speed: float,
-    dt: float,
-) -> float:
-    speed = np.linalg.norm(aircraft_state.velocity)
-    error = target_speed - speed
-    speed_derivative = (speed - controller_state.previous_speed) / dt
-
-    controller_state.previous_speed = speed
-
-    base_throttle = 0.6
-    kp = 0.01
-    kd = 0.003
-
-    throttle_command = base_throttle + kp * error - kd * speed_derivative
-
-    return float(np.clip(throttle_command, 0.0, 1.5))
 
 @dataclass
 class ControlInputs:
