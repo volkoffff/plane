@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from math import isfinite
 
 from physics.projectiles import Bullet
-from piloting.commands import AircraftAction
+from piloting.commands import AircraftAction, FlightCommand
 from simulation.aircraft import AircraftEntity
 from simulation.combat import CombatSystem
 from simulation.weapons import WeaponSystem
@@ -19,6 +19,11 @@ class SimulationWorld:
         self.aircraft[entity.id] = entity
 
     def step(self, actions: dict[int, AircraftAction], dt: float) -> None:
+        """Advance every living aircraft by dt.
+
+        Missing actions use neutral pilot inputs, zero commanded throttle and
+        no gun fire for this step; previous commands are not retained.
+        """
         if not isfinite(dt) or dt <= 0.0:
             raise ValueError("World step must be positive and finite")
         previous_positions = {
@@ -35,7 +40,7 @@ class SimulationWorld:
 
             action = actions.get(aircraft_id)
             if action is None:
-                continue
+                action = AircraftAction(FlightCommand(0.0, 0.0, 0.0, 0.0))
 
             entity.physics.step(action.flight, dt)
 
