@@ -70,6 +70,13 @@ class AircraftVisual:
             self.root,
             aircraft_visual.getTightBounds(self.root),
         )
+        self.set_animations_enabled(self.animations_enabled)
+
+    def set_animations_enabled(self, enabled: bool) -> None:
+        self.animations_enabled = enabled
+        if not enabled and self.animations is not None:
+            self.animations.control_surfaces.reset()
+            self.animations.engine_exhaust.update(0.0, 0.0, 0.0)
 
     def update_pose(self, state: AircraftState) -> tuple[np.ndarray, np.ndarray]:
         if self.root is None:
