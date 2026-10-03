@@ -93,6 +93,10 @@ def flight_control_law_from_mouse(
     target_yaw_rate : taux de lacet souhaité, en rad/s
     """
 
+    mouse_dx = float(np.clip(mouse_dx, -1.0, 1.0))
+    mouse_dy = float(np.clip(mouse_dy, -1.0, 1.0))
+    rudder_input = float(np.clip(rudder_input, -1.0, 1.0))
+
     max_roll_rate = np.deg2rad(120.0)
     max_pitch_rate = np.deg2rad(60.0)
 
