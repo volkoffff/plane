@@ -1,7 +1,8 @@
 from dataclasses import dataclass
-from physics.math3d import euler_to_quaternion
 
 import numpy as np
+
+from physics.math3d import euler_to_quaternion
 
 
 @dataclass
@@ -11,11 +12,6 @@ class AircraftState:
     quaternion: np.ndarray     # orientation body -> world, [w, x, y, z]
     omega_body: np.ndarray     # [p, q, r] en rad/s dans le repère avion
     throttle: float            # 0.0 à 1.5
-
-
-@dataclass
-class SpeedControllerState:
-    previous_speed: float = 0.0
 
 
 def initial_state() -> AircraftState:
