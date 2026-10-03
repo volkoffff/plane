@@ -67,6 +67,7 @@ class ControlSurfaceAnimator:
 
     def update(self, controls: ControlSurfaceState | None) -> None:
         if controls is None:
+            self.reset()
             return
 
         for binding, node, base_mat in self.surfaces:
@@ -78,6 +79,10 @@ class ControlSurfaceAnimator:
                 raise ValueError(f"Axe de surface invalide : {binding.axis}")
 
             node.setMat(LMatrix4f.rotateMat(angle, axis) * base_mat)
+
+    def reset(self) -> None:
+        for _, node, base_mat in self.surfaces:
+            node.setMat(base_mat)
 
 
 def make_exhaust_cone(name: str, segments: int = 8) -> GeomNode:
