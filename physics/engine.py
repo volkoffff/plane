@@ -51,16 +51,3 @@ def thrust_magnitude(
     thrust *= thrust_altitude_factor(altitude)
 
     return float(thrust)
-
-def thrust_force(
-    state: AircraftState,
-    params: AircraftParameters,
-) -> np.ndarray:
-    thrust = thrust_magnitude(state, params)
-    direction = np.array([
-        np.cos(state.pitch),
-        0.0,
-        np.sin(state.pitch),
-    ])
-
-    return thrust * direction
