@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from physics.projectiles import Bullet, create_bullet_from_aircraft, integrate_bullets
+from physics.projectiles import create_bullet_from_aircraft, integrate_bullets
 from piloting.commands import AircraftAction
 
 
